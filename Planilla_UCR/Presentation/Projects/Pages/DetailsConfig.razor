@@ -1,0 +1,409 @@
+﻿@page "/Projects/{personEmail}/{projectName}"
+@using Application.Projects
+@using Application.Employers
+@using Application.Agreements
+@using Application.Subscribes
+@using Application.Email
+@using Application.People
+@using Application.ContextMenu
+@using Application.Subscriptions
+@using Domain.Projects.Entities
+@using Domain.Employers.Entities
+@using Domain.Agreements.Entities
+@using Domain.Subscribes.Entities
+@using Domain.Subscriptions.Entities
+@using Domain.People.Entities
+@using Presentation.Core.Components
+@using Presentation.Projects.Models
+@using System.Globalization
+@using System.ComponentModel.DataAnnotations
+
+@inject IEmailServices EmailService
+@inject IEmployerService EmployerService
+@inject IProjectService ProjectService
+@inject IPersonService PersonService
+@inject IAgreementService AgreementService
+@inject ISubscriptionService SuscriptionService
+@inject ISubscribeService SubscribeService
+@inject IContextMenuService ContextMenuService
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+
+@{ 
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{personEmail}"),
+        new BreadcrumbItem($"{projectName}", href: null, disabled: true)
+    };
+}
+
+@if (_loading)
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+            <MudText Align="Align.Center" Typo="Typo.h6">
+                <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+            </MudText>
+    </MudPaper>
+}
+else
+{
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+
+    
+    <MudToolBar DisableGutters="true" Class="gap-4">
+        <MudSpacer></MudSpacer>
+        @if(_disabled)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="EnableForm"/>
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="DisableForm"/>
+        }
+        
+    </MudToolBar>
+    <MudGrid>
+        @*Text fields *@
+        <MudItem xs="12" sm="12">
+            <MudPaper  Height="250px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+                @if (_disabled)
+                {
+                    <MudText Align="Align.Center" Typo="Typo.h6">Detalles del proyecto</MudText>
+                }
+                else
+                {
+                    <MudText Align="Align.Center" Typo="Typo.h6">Configuraciones del proyecto</MudText>
+                }
+                <MudForm @ref="_form">
+                    <MudGrid>
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="8">
+                            <MudTextField Label="Nombre del proyecto" Class="mt-3" Variant="Variant.Outlined" ReadOnly="@_disabled"  
+                            Required="true" RequiredError="Ingrese un nombre para su proyecto" 
+                            @bind-Value="_newName" For="@(() => _limits.projectName)">
+                            </MudTextField>
+                        </MudItem>
+                        <MudItem xs="2"> </MudItem>
+
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="8">
+                            <MudTextField Label="Descripción del proyecto" Lines="6" Variant="Variant.Outlined" ReadOnly="@_disabled"
+                            @bind-Value="_projectInfo.ProjectDescription"  For="@(() => _limits.description )"
+                            ></MudTextField>
+                        </MudItem>
+                        <MudItem xs="2"> </MudItem>
+                
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="8">
+                            <MudSelect typeof="int" @bind-Value="_projectInfo.PaymentInterval" Label="Intervalo de pago" Variant="Variant.Outlined"
+                            ReadOnly="@_disabled" >
+                                <MudSelectItem Value="@("Quincenal")">Pago quincenal</MudSelectItem>
+                                <MudSelectItem Value="@("Mensual")">Pago mensual</MudSelectItem>
+                                <MudSelectItem Value="@("Semanal")">Pago semanal</MudSelectItem>
+                                <MudSelectItem Value="@("Bisemanal")">Pago bisemanal</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="2"></MudItem>
+
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="4">
+                            <MudNumericField Immediate="true" Label="Monto máximo para beneficios" Format="N2" Culture="@_cultureCR"
+                            ReadOnly="@_disabled" Variant="Variant.Outlined" @bind-Value="_maximumAmountForBenefits" Adornment="Adornment.Start" 
+                            AdornmentText="@_cultureCR.NumberFormat.CurrencySymbol" Min=0.0/>
+                        </MudItem>
+
+                        <MudItem xs="4">
+                            <MudNumericField @bind-Value="_projectInfo.MaximumBenefitAmount" Min=0 ReadOnly="@_disabled" Label="Cantidad máxima de beneficios" 
+                            Variant="Variant.Outlined"></MudNumericField>
+                        </MudItem>
+
+                        <MudItem xs="2"></MudItem>
+                        <MudItem xs="2"></MudItem>
+                        <MudItem xs="8">
+                        </MudItem>
+                        <MudItem xs="2"></MudItem>
+                        <MudItem xs="2"></MudItem>
+
+                        @if(_disabled == false) {
+                            <MudItem xs="8"> 
+                                <MudButton Disabled="@snackHandler._saving" OnClick="ValidProject" 
+                                Variant="Variant.Filled" Color="Color.Primary">
+                                    @if (@snackHandler._saving)
+                                    {
+                                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                        <MudText Class="ms-2">Actualizando</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText>Actualizar</MudText>
+                                    }
+                                </MudButton>
+                                <MudButton Disabled="true"> </MudButton>
+
+                                <MudButton OnClick="Cancel" Variant="Variant.Filled" Color="Color.Transparent">
+                                    <MudText>Cancelar</MudText>
+                                </MudButton>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudForm>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+
+@code {
+    private bool _loading = true;
+    private bool _disabled = true;
+    private string _newName = "";
+    private int _maxBenefits = 0;
+    private double _maxBenefitsAmount = 0;
+    private double? _maximumAmountForBenefits = 0.0;
+    private string _oldDescription = "";
+    private string _oldPaymentInterval = "";
+    private int _oldMaximumBenefitAmount = 0;
+    private double _oldMaximumAmountForBenefits = 0.0;
+    private bool _changesInBenefits = false;
+
+    private CultureInfo _cultureCR = CultureInfo.GetCultureInfo("es-CR");
+    private LimitsValidationForm _limits = new LimitsValidationForm();
+    private Project _projectInfo = new Project("","","",0.0,0,"",1);
+    private IEnumerable<Agreement> _agreementElements;
+    private IEnumerable<Subscribe> _employeebenefits;
+    private List<string> _employeesEmail = new List<string>();
+    private List<string> _employeesName = new List<string>();
+    private List<string> _overbenefitEmployeesEmail = new List<string>();
+    private List<string> _overbenefitEmployeesName = new List<string>();
+
+    private MudForm _form;
+    SnackHandler snackHandler = new SnackHandler();
+
+    [Parameter] public string personEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ContextMenuService.SetProjectsContext(true,true,projectName, personEmail,true, ContextMenuService.GetReportsContext());
+        _projectInfo = await ProjectService.GetProject(personEmail,projectName);
+        _agreementElements = await AgreementService.GetAllAgreementsByProjectAndEmployer(projectName, personEmail);
+        await ValidateAmountOfBenefits();
+        if (_projectInfo != null)
+        {
+            _maximumAmountForBenefits = _projectInfo.MaximumAmountForBenefits;
+            _newName= projectName;
+            _oldDescription = _projectInfo.ProjectDescription;
+            _oldPaymentInterval = _projectInfo.PaymentInterval;
+            _oldMaximumBenefitAmount = _projectInfo.MaximumBenefitAmount;
+            _oldMaximumAmountForBenefits = _projectInfo.MaximumAmountForBenefits;
+            _loading = false;
+        }
+    }
+
+    private async Task ValidProject()
+    {
+        snackHandler._saving = true;
+        await _form.Validate();
+        bool _valid = true;
+        _newName = _newName.Trim();
+
+        if (_projectInfo.ProjectName != _newName)
+        {
+            _valid = await ValidName(); 
+        }
+
+        if (_form.IsValid && _valid && await ValidateAmountOfBenefits())
+        {
+            await SaveProject();
+        }
+        snackHandler._saving = false;
+    }
+
+    private async Task SaveProject()
+    {
+        snackHandler._saving = false;
+        _projectInfo.MaximumAmountForBenefits = (double)_maximumAmountForBenefits;
+        ProjectService.ModifyProject(_projectInfo, _newName);
+        _projectInfo.ProjectName = _newName;
+        projectName = _newName;
+
+        if ((_oldMaximumBenefitAmount < _projectInfo.MaximumBenefitAmount ||
+            _oldMaximumAmountForBenefits < _maximumAmountForBenefits))
+            await NotifyMyEmployeesIncrease();
+
+        if ((_oldMaximumBenefitAmount > _projectInfo.MaximumBenefitAmount || 
+            _oldMaximumAmountForBenefits > _maximumAmountForBenefits))
+            await NotifyMyEmployeesDecrease();
+
+        ShowSnackNotification(_projectInfo.ProjectName + " modificado exitosamente.", Severity.Success);
+        ShowSnackNotification("Empleados notificados sobre sus beneficios.", Severity.Info);
+        DisableForm();
+
+    }
+
+    private async Task<bool> ValidName()
+    {
+        bool _valid = true;
+        _newName = _newName.Trim();
+        Project _tempProject = await ProjectService.GetProject(personEmail, _newName);
+        if (_tempProject != null)
+        {
+            _valid = false;
+            ShowSnackNotification("El nombre: " + _newName + ", ya está siendo utilizado", Severity.Error);
+            DisableForm();
+        }
+        return _valid;
+    }
+
+    private async Task<bool> ValidateAmountOfBenefits()
+    {
+        bool valid = true;
+        _maxBenefitsAmount = 0.0;
+        IEnumerable < Subscription > benefitsList = await SuscriptionService.GetBenefitsByProject(personEmail, projectName);
+        _maxBenefits = benefitsList.Length();
+        foreach(Subscription actualBenefit in benefitsList)
+            _maxBenefitsAmount += actualBenefit.Cost;
+
+        if (_maxBenefitsAmount < _maximumAmountForBenefits || _maxBenefits < _projectInfo.MaximumBenefitAmount)
+        {
+            valid = false;
+            ShowSnackNotification("Beneficios insuficientes, no puede asignar más beneficios de los existentes", Severity.Warning);
+        }
+        return valid;
+    }
+
+    private async Task FindEmployeesOfProject()
+    {
+        foreach (Agreement actualAgreement in _agreementElements)
+        {
+            _employeesEmail.Add(actualAgreement.EmployeeEmail);
+            Person actualEmployee = await PersonService.GetPerson(actualAgreement.EmployeeEmail);
+            _employeesName.Add(actualEmployee.Name+ " " + actualEmployee.LastName1+ " " + actualEmployee.LastName2);
+        }
+    }
+
+    private async Task GetOverbenefitEmployees()
+    {
+        double totalCost = 0;
+        int amountOfBenefits = 0;
+        for (int i = 0; i < _employeesEmail.Length(); i++) 
+        {
+            _employeebenefits = await SubscribeService.GetBenefitsByEmployee(_employeesEmail.ElementAt(i), projectName);
+            amountOfBenefits = _employeebenefits.Length();
+            foreach (Subscribe actualSubscribe in _employeebenefits)
+                totalCost += actualSubscribe.Cost;
+
+            if (totalCost > _projectInfo.MaximumAmountForBenefits ||
+                amountOfBenefits > _projectInfo.MaximumBenefitAmount)
+            {
+                _overbenefitEmployeesEmail.Add(_employeesEmail.ElementAt(i));
+                _overbenefitEmployeesName.Add(_employeesName.ElementAt(i));
+            }
+        }
+    }
+
+    private async Task NotifyMyEmployeesIncrease()
+    {
+
+        Person employer = await PersonService.GetPerson(personEmail);
+        EmailObject emailData = new EmailObject("", "", "", "", "");
+        await FindEmployeesOfProject();
+        for (int i = 0; i < _employeesEmail.Length(); i++) 
+        {
+            emailData.EmployeeName = _employeesName.ElementAt(i);
+            emailData.EmployerName = employer.Name + " " + employer.LastName1 + " " + employer.LastName2;
+            emailData.ProjectName = projectName;
+            emailData.Message = "";
+            emailData.Destiny = _employeesEmail.ElementAt(i);
+            EmailService.SendIncreaseBenefitsEmail(emailData);
+        }
+        _employeesEmail.Clear();
+    }
+
+    private async Task NotifyMyEmployeesDecrease()
+    {
+        Person employer = await PersonService.GetPerson(personEmail);
+        await FindEmployeesOfProject();
+        await GetOverbenefitEmployees();
+
+        for (int i = 0; i < _overbenefitEmployeesEmail.Length(); i++) 
+        {
+            EmailObject emailData = new EmailObject("", "", "", "", "");
+            emailData.EmployeeName = _overbenefitEmployeesName.ElementAt(i);
+            emailData.EmployerName =  employer.Name + " " + employer.LastName1 + " " + employer.LastName2;
+            emailData.ProjectName = projectName;
+            emailData.Message = "a final del presente mes.";
+            emailData.Destiny = _overbenefitEmployeesEmail.ElementAt(i);
+            EmailService.SendDecreaseBenefitsEmail(emailData);
+        }
+        if (_overbenefitEmployeesEmail.Length() > 0)
+            await SendEmployerEmail();
+    }
+
+    public async Task SendEmployerEmail()
+    {
+        EmailObject employerEmailData = new EmailObject("", "", "", "", "");
+        Person employer = await PersonService.GetPerson(personEmail);
+        employerEmailData.EmployeeName = "";
+        employerEmailData.EmployerName = employer.Name + " " + employer.LastName1 + " " + employer.LastName2;
+        employerEmailData.ProjectName = projectName;
+        employerEmailData.Message = "";
+        employerEmailData.Destiny = personEmail;
+        EmailService.SendOverbenefitsEmployeesEmail(_overbenefitEmployeesEmail,_overbenefitEmployeesName,employerEmailData);
+    }
+
+    public class LimitsValidationForm
+    {
+        [StringLength(250, ErrorMessage = "El nombre del proyecto es muy grande")]
+        public string projectName { get; set; }
+
+        [EmailAddress (ErrorMessage = "El Email es inválido")]
+        [StringLength(250, ErrorMessage = "El Email es muy grande")]
+        public string email { get; set; }
+
+        [StringLength(600, ErrorMessage = "La descripción es muy grande")]
+        public string description { get; set; }
+
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    void Cancel()
+    {
+        _newName = _projectInfo.ProjectName;
+        _projectInfo.ProjectDescription = _oldDescription;
+        _projectInfo.PaymentInterval = _oldPaymentInterval;
+        _maximumAmountForBenefits = _projectInfo.MaximumAmountForBenefits;
+        _projectInfo.MaximumBenefitAmount = _oldMaximumBenefitAmount;
+        _disabled = true;
+        nav.NavigateTo($"/Projects/{personEmail}/{projectName}/");
+    }
+
+    private void EnableForm()
+    {
+        _disabled = false;
+        _newName = _projectInfo.ProjectName;
+    }
+
+    private void DisableForm()
+    {
+        _disabled = true;
+        _newName = _projectInfo.ProjectName;
+    }
+}

@@ -1,0 +1,57 @@
+﻿@using ChartJs.Blazor
+@using ChartJs.Blazor.Common
+@using ChartJs.Blazor.PieChart
+@using ChartJs.Blazor.Util
+
+<Chart Height="180" Config="_configPieChart"></Chart>
+
+@code {
+    [Parameter]
+    public Dictionary<string, double>? data { get; set; }
+
+    [Parameter]
+    public string title { get; set; }
+
+    [Parameter]
+    public IList<string> colorList { get; set; }
+
+    private PieConfig _configPieChart;
+    private bool _isLoading = true;
+
+    private void ConfigurationPieChart()
+    {
+        _configPieChart = new PieConfig();
+        _configPieChart.Options = new PieOptions
+            {
+                Responsive = true,
+               
+        };
+    }
+
+    protected override void OnInitialized()
+    {
+        ConfigurationPieChart();
+        FillPieChart();
+    }
+
+    private void FillPieChart()
+    {
+        foreach (string item in data.Keys)
+        {
+            _configPieChart.Data.Labels.Add(item);
+        }
+
+        string []colors = new string[data.Length()];
+        for (var i = 0; i < data.Length(); i++)
+        {
+            colors[i] = colorList[i%colorList.Length()];
+        }
+
+        PieDataset<double> dataset = new PieDataset<double>(data.Values)
+        {
+            BackgroundColor = colors,
+        };
+
+        _configPieChart.Data.Datasets.Add(dataset);
+    }
+}

@@ -1,0 +1,337 @@
+﻿@using Domain.Projects.Entities
+@using Domain.Agreements.Entities
+@using Domain.People.Entities
+@using Domain.AgreementTypes.Entities
+@using Application.Projects
+@using Application.Agreements
+@using Application.People
+@using Application.Email
+@using Application.AgreementTypes
+@using Presentation.Core.Components
+@using Presentation.Projects.Models
+@using Application.ContextMenu
+@using Presentation.Authentication
+
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+
+@inject IPersonService PersonService
+@inject IEmailServices EmailService
+@inject IProjectService ProjectService
+@inject IAgreementService AgreementService
+@inject IAgreementTypeService AgreementTypeService
+@inject IContextMenuService ContextMenuService
+
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos",  href: null, disabled: true),
+
+    };
+}
+
+@if (_loading)
+{
+        <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+            <MudText Align="Align.Center" Typo="Typo.h6">
+                <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+            </MudText>
+    </MudPaper>
+}
+else
+{
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    @if (_emptyProject)
+    {
+        <ProjectListError employeeEmail="@personEmail" projectName="@projectName" SendTableState="SendConmuteSignal" message="No hay proyectos asociados a este empleador"></ProjectListError>
+    }
+    else
+    {
+        <MudTable @ref="_mudTable" Items="@_projectElements" RowsPerPage="4" Hover="true" Breakpoint="Breakpoint.Sm" 
+        Loading="@_emptyProject" LoadingProgressColor="Color.Primary" Filter="new Func<Project,bool>(FilterFuncEmployer)">  
+
+            <ToolBarContent>
+                <MudButton  Color="Color.Tertiary"> Lista de proyectos</MudButton>
+                <MudButton OnClick="SendConmuteSignal"> Proyectos desactivados </MudButton>
+                <MudSpacer></MudSpacer>
+                <MudTextField @bind-Value="_searchString" Placeholder="Buscar proyecto" Adornment="Adornment.Start" 
+                    AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0">
+                </MudTextField>
+            </ToolBarContent>
+
+            <HeaderContent>
+                <MudTh Style="text-align:justify-all">Nombre</MudTh>
+                <MudTh Style="text-align:justify-all">Descripción</MudTh>
+                <MudTh Style="text-align:right">Borrar</MudTh>
+            </HeaderContent>
+
+            <RowTemplate Context="row">
+                <MudTd DataLabel="Nombre" Style="text-align:justify-all">
+                    <MudLink Color="Color.Primary" Underline="Underline.Always" Href="@($"/Projects/{@row.EmployerEmail}/{@row.ProjectName}")">
+                        @row.ProjectName
+                    </MudLink>
+                </MudTd>
+
+                <MudTd DataLabel="Descripción" Style="text-align:justify-all">@row.ProjectDescription</MudTd>
+
+                <MudTd Style="text-align:right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Primary" OnClick="@(e => GoToDisable(@row.ProjectName))"/>
+                </MudTd>
+            
+            </RowTemplate>
+
+            <PagerContent>
+                    <MudPagination SelectedChanged="PageChangedR" 
+                        Count="@((_mudTable.GetFilteredItemsCount() + _mudTable.RowsPerPage - 1) / _mudTable.RowsPerPage)" 
+                        Color="Color.Primary" Class="pa-4"/>
+            </PagerContent>
+        </MudTable>
+        <br>
+        <MudButton Variant="Variant.Filled" OnClick="GoToCreate" Color="Color.Primary">Crear proyecto</MudButton>
+
+                
+        <MudDialog @bind-IsVisible="_visible" Options="dialogOptions Style="text-align:justify-all">
+            <TitleContent>
+                <MudText Typo="Typo.h6" Style="text-align:justify-all" >
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="@Color.Primary" Class="mr-2"/> 
+                        Este proyecto tiene empleados contratados, si confirma esta acción se procederá a terminar de forma 
+                        temprana el contrato con todos sus empleados y la fecha de fin será el día de hoy. 
+                </MudText>
+            </TitleContent>
+            <DialogContent>
+                <MudItem xs="12" Class="d-flex justify-center align-center">
+                    <MudTextField @bind-Value="_showMessage" Label="Cantidad de contratos activos con los empleados:" 
+                        Lines= "1" Variant="Variant.Outlined" ReadOnly ="true">
+                    </MudTextField>
+                </MudItem>
+
+                <div class="d-flex mud-width-full text-align:justify-all">
+                     <div class="d-flex flex-column">
+                        <MudItem xs="12" Class=" d-flex text-align:justify-all">
+                                <MudText Typo="Typo.caption" Class=" d-flex text-align:justify-all">
+                                    *Nota: Si confirma la desactivación de este proyecto se le enviará un correo a cada uno de los empleados 
+                                    que tiene actualmente contratados, indicando el motivo de la desactivación de este proyecto.
+                                </MudText>
+                        </MudItem>
+                    </div>
+                </div>
+                <MudItem xs="12"/>
+                <MudItem xs="12" Class="d-flex justify-center align-center">
+                    <MudTextField Required="true" RequiredError="Incluya una justificación" @bind-Value="_justification" 
+                    Label="Si desea
+                    terminar los contratos asociados debe introducir una justificación:" Lines= "6" 
+                    Variant="Variant.Outlined"></MudTextField>
+                </MudItem>
+            </DialogContent>
+            <DialogActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ConfirmDisableProject" Class="px-10">
+                    Confirmar desactivado de proyecto
+                </MudButton>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CancelAction" Class="px-10">Cancelar</MudButton>
+            </DialogActions>
+        </MudDialog>
+    }    
+    
+}
+
+@code {
+    private bool _visible;
+    private bool _emptyProject = true;
+    private bool _loading = true;
+    private string _showMessage = "";
+    private string _justification = "";
+    private string _searchString = "";
+    private string _selectedProject = "";
+
+    private IEnumerable<Person> _people;
+    private IEnumerable<Project> _projectElements;
+    private IEnumerable<Agreement> _agreements = new List<Agreement>();
+    private List<Person> _activeEmployees = new List<Person>();
+
+
+    [Parameter] public string personEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+    [Parameter] public EventCallback<string> SendTableState { get; set; }
+
+
+    private void OpenDialog() => _visible = true;
+    private void CloseDialog() => _visible = false;
+    private DialogOptions _dialogOptions = new() { FullWidth = true };
+    private MudTable<Project> _mudTable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _people = await PersonService.GetAllPeopleAsync();
+        await LoadEmployer();
+
+    }
+    
+    private async Task SendConmuteSignal()
+    {
+        await SendTableState.InvokeAsync("");
+    }
+
+    private async Task LoadEmployer()
+    {
+        _projectElements = await ProjectService.GetEmployerProyects(personEmail);
+        _agreements = await AgreementService.GetEmployerAgreements(personEmail);
+        SelectActiveProjects();
+
+        if (_projectElements.Length() > 0)
+        {
+            _emptyProject = false;
+        }
+        await InvokeAsync(StateHasChanged);
+        _loading = false;
+    }
+
+    private void SelectActiveProjects()
+    {
+        List<Project> _activeProjectElements = new List<Project>();
+        foreach (Project actualProject in _projectElements)
+        {
+            if (actualProject.IsEnabled == 1)
+            {
+                _activeProjectElements.Add(actualProject);
+            }
+        }
+        _projectElements = _activeProjectElements.AsEnumerable();
+    }
+
+    private async Task GoToDisable(string projectName)
+    {
+        _selectedProject = projectName;
+        int amountOfAgreements = 0;
+        if (_agreements.Length() > 0)
+        {
+            amountOfAgreements = CheckActiveAgreements(amountOfAgreements); 
+            if (amountOfAgreements == 0)
+            {
+                await DisableProject();
+            }
+        }
+        else
+        {
+            await DisableProject();
+        }
+    }
+
+    public int CheckActiveAgreements(int amountOfAgreements)
+    {
+        foreach (Agreement actualAgreement in _agreements)
+        {
+            if (actualAgreement.ProjectName == _selectedProject && actualAgreement.ContractFinishDate > DateTime.Now)
+            {
+                foreach (Person actualPerson in _people)
+                {
+                    if (actualAgreement.EmployeeEmail == actualPerson.Email)
+                    {
+                        amountOfAgreements++;
+                        _activeEmployees.Add(actualPerson);
+                    }
+                }
+            }
+        }
+
+        if (amountOfAgreements > 0)
+        {
+            if (amountOfAgreements == 1)
+                _showMessage = $"{amountOfAgreements} contrato activo";
+            else 
+                _showMessage = $"{amountOfAgreements} contratos activos"; 
+            OpenDialog();
+        }
+        return amountOfAgreements;
+    }
+
+    private async Task ConfirmDisableProject()
+    {
+        EmailObject emailData = new EmailObject("", "", "", "", "");
+        Person employerInfo = await PersonService.GetPerson(personEmail);
+        if (_justification != "")
+        {
+            foreach (Person activePerson in _activeEmployees)
+            {
+                foreach (Agreement actualAgreement in _agreements)
+                {
+                    if (actualAgreement.EmployeeEmail == activePerson.Email)
+                    {
+                        await AgreementService.DesactivateAgreement(activePerson.Email, personEmail, this.projectName, _justification);
+                        emailData.EmployeeName = activePerson.Name + " " + activePerson.LastName1 + " " + activePerson.LastName2;
+                        emailData.EmployerName = employerInfo.Name + " " + employerInfo.LastName1 + " " + employerInfo.LastName2;
+                        emailData.ProjectName = actualAgreement.ProjectName;
+                        emailData.Message = _justification;
+                        emailData.Destiny = actualAgreement.EmployeeEmail;
+                        EmailService.SendFiredEmployeeEmail(emailData);
+                    }
+                }
+            }
+            await DisableProject();
+            CloseDialog();
+        }
+    }
+
+
+    private bool FilterFuncEmployer(Project element) => FilterFuncR(element, _searchString);
+
+    private bool FilterFuncR(Project element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.ProjectName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private async Task DisableProject() 
+    {
+        ProjectService.DisableProject(_selectedProject, this.personEmail);
+        ShowSnackNotification(_selectedProject + " desactivado exitosamente", Severity.Success);
+        await Task.Delay(5000);
+        nav.NavigateTo($"/Projects/{personEmail}/", true);
+    }
+
+    private void CancelAction() 
+    {
+        CloseDialog();
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    private void GoToCreate()
+    {
+        nav.NavigateTo($"/Create_Project/{personEmail}");
+    }
+
+    private void GoToConfigs()
+    {
+        nav.NavigateTo($"/Projects/{personEmail}/{projectName}");
+    }
+
+    private void GoToDelete()
+    {
+        nav.NavigateTo($"/Projects/{personEmail}/{projectName}");
+    }
+
+    private void PageChangedR(int i)
+    {
+        _mudTable.NavigateTo(i - 1);
+    }
+}

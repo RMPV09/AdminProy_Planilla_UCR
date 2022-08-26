@@ -1,0 +1,329 @@
+﻿@using Application.Email
+@using Application.Employees.Models
+@using Domain.Projects.Entities
+@using Domain.Agreements.Entities
+@using Domain.People.Entities
+@using Domain.AgreementTypes.Entities
+@using Application.Projects
+@using Application.Agreements
+@using Application.People
+@using Application.AgreementTypes
+@using Presentation.Core.Components
+@using Presentation.Projects.Models
+@using Application.ContextMenu
+@using Presentation.Authentication
+
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+
+@inject IPersonService PersonService
+@inject IProjectService ProjectService
+@inject IAgreementService AgreementService
+@inject IAgreementTypeService AgreementTypeService
+@inject IContextMenuService ContextMenuService
+@inject IEmailServices EmailService
+
+@{
+	List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+	{
+		new BreadcrumbItem("Inicio", href: ""),
+		new BreadcrumbItem("Proyectos",  href: null, disabled: true),
+
+	};
+}
+
+@if (_loading)
+{
+	<MudPaper Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+		<MudText Align="Align.Center" Typo="Typo.h6">
+			<MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+		</MudText>
+	</MudPaper>
+}
+else
+{
+	@if (_emptyAgreement)
+	{
+		<MudText Typo="Typo.h6" Align="Align.Center">
+			No hay proyectos asociados al empleado
+		</MudText>
+	}
+	else
+	{
+		<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+		<MudTable @ref="_table" Items="@_joinTable" RowsPerPage="4" MultiSelection="true"
+		  @bind-SelectedItems="_selectedItems" Hover="true" Breakpoint="Breakpoint.Sm"
+		  Loading="@_emptyAgreement" LoadingProgressColor="Color.Info"
+		  Filter="new Func<Agreement,bool>(FilterFuncEmployee)">
+			<ToolBarContent>
+				<MudText Align="Align.Center" Typo="Typo.h6">Lista de proyectos en los que está contratado</MudText>
+				<MudSpacer></MudSpacer>
+				<MudTextField @bind-Value="_searchString" Placeholder="Buscar proyecto" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+			</ToolBarContent>
+
+			<HeaderContent>
+				<MudTh Style="text-align:justify-all">Nombre proyecto</MudTh>
+				<MudTh Style="text-align:justify-all">Nombre empleador</MudTh>
+				<MudTh Style="text-align:justify-all">Tipo contrato</MudTh>
+				<MudTh Style="text-align:justify-all">Inicio contrato</MudTh>
+				<MudTh Style="text-align:justify-all">Fin contrato</MudTh>
+				<MudTh Style="text-align:justify-all">Monto por horas</MudTh>
+			</HeaderContent>
+
+			<RowTemplate Context="row">
+				<MudTd DataLabel="Nombre proyecto">
+					<MudLink Color="Color.Primary" Underline="Underline.Always" Href="@($"/Projects/{personEmail}/{@row.EmployerEmail}/{@row.ProjectName}")">
+						@row.ProjectName
+					</MudLink>
+				</MudTd>
+				<MudTd DataLabel="Nombre del empleador" Style="text-align:justify-all">@row.EmployerEmail.Split(",")[1] @row.EmployerEmail.Split(",")[2] @row.EmployerEmail.Split(",")[3]</MudTd>
+				<MudTd DataLabel="Tipo contrato" Style="text-align:justify-all">@row.ContractType</MudTd>
+				<MudTd DataLabel="Inicio contrato" Style="text-align:justify-all">@row.ContractStartDate.GetValueOrDefault().ToShortDateString()</MudTd>
+				<MudTd DataLabel="Fin contrato" Style="text-align:justify-all">@row.ContractFinishDate.GetValueOrDefault().ToShortDateString()</MudTd>
+				<MudTd DataLabel="Monto por horas" Style="text-align:right">₡@row.MountPerHour.00/H</MudTd>
+			</RowTemplate>
+
+			<PagerContent>
+				<MudPagination SelectedChanged="PageChangedE" Count="@((_table.GetFilteredItemsCount() + _table.RowsPerPage - 1) / _table.RowsPerPage)" Color="Color.Primary" Class="pa-4" />
+			</PagerContent>
+		</MudTable>
+		<br>
+		<MudToolBar DisableGutters="true" Class="gap-4">
+			<MudButton Variant="Variant.Filled" OnClick="CheckSelectedItems" Color="Color.Primary">Renunciar</MudButton>
+		</MudToolBar>
+	}
+}
+
+@code {
+	[Parameter] public string personEmail { get; set; }
+	[Parameter] public string projectName { get; set; }
+	private IEnumerable<Person> _people;
+	private IEnumerable<Project> _projectElements;
+	private IList<Agreement> _joinTable = new List<Agreement>();
+	private IEnumerable<AgreementType> _agreementType = new List<AgreementType>();
+	private IEnumerable<Agreement> _agreements = new List<Agreement>();
+	private MudTable<Agreement> _table;
+	private HashSet<Agreement> _selectedItems = new HashSet<Agreement>();
+	private bool _emptyAgreement = true;
+	private bool _loading = true;
+	private string _searchString = "";
+
+	protected override async Task OnInitializedAsync()
+	{
+		await CheckToDesactivateAgreements();
+		await LoadEmployee();
+	}
+
+	private async Task LoadEmployee()
+	{
+		_agreements = await AgreementService.GetEmployeeAgreements(personEmail);
+
+		if (_agreements.Length() > 0)
+		{
+			_people = await PersonService.GetAllPeopleAsync();
+			_agreementType = await AgreementTypeService.GetAllAgreementTypes();
+			_projectElements = await ProjectService.GetAllProjectsAsync();
+			_emptyAgreement = false;
+			CreateEmployeeList();
+		}
+		_loading = false;
+		await InvokeAsync(StateHasChanged);
+	}
+
+	void CreateEmployeeList()
+	{
+		var myJoinTable = from A in _agreements
+								join Pe in _people on A.EmployerEmail equals Pe.Email
+								join P in _projectElements on A.ProjectName equals P.ProjectName
+								join ATP in _agreementType on A.ContractType equals ATP.TypeAgreement
+								where P.IsEnabled == 1 && P.EmployerEmail == A.EmployerEmail && ATP.MountPerHour == A.MountPerHour
+								select new 
+								{
+									EmployeeEmail = A.EmployeeEmail,	
+									EmployerEmail = A.EmployerEmail + "," +Pe.Name+ "," +Pe.LastName1+ "," +Pe.LastName2,
+									ProjectName = P.ProjectName,
+									ContractStartDate = (DateTime)A.ContractStartDate,
+									ContractType = A.ContractType,
+									MountPerHour = ATP.MountPerHour,
+									ContractFinishDate = (DateTime)A.ContractFinishDate,
+									IsEnabled = 1,
+									Justification = ""
+								};
+		
+		foreach(var item in myJoinTable)
+		{
+			_joinTable.Add(new Agreement(item.EmployeeEmail, item.EmployerEmail, item.ProjectName, item.ContractStartDate
+			,item.ContractType, item.MountPerHour, item.ContractFinishDate, item.IsEnabled, item.Justification));
+		}
+	
+	}
+
+	private bool FilterFuncEmployee(Agreement element) => FilterFuncE(element, _searchString);
+
+	private bool FilterFuncE(Agreement element, string searchString)
+	{
+		if (string.IsNullOrWhiteSpace(searchString))
+			return true;
+		if (element.ProjectName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+			return true;
+		return false;
+	}
+
+	private void PageChangedE(int i)
+	{
+		_table.NavigateTo(i - 1);
+	}
+
+	private async Task CheckSelectedItems()
+	{
+		if (_selectedItems.Length() > 0)
+		{
+			Snackbar.Add("Su solicitud está siendo procesada, por favor espere un momento", Severity.Success);
+			await Task.Delay(500);
+			await QuitProjects();
+		}
+		else
+		{
+			Snackbar.Add("Por favor seleccione los proyectos a los cuales quiere renunciar", Severity.Warning);
+		}
+	}
+
+	private  async Task QuitProjects()
+	{
+		DateTime endDate;
+		foreach (var element in _selectedItems)
+		{
+			endDate = await UpdateEmployeeAgreement(element.EmployerEmail.Split(",")[0], element.ProjectName);
+			SendEmailToEmployee(element, endDate);
+			SendEmailToEmployer(element, endDate);
+		}
+		Snackbar.Add("Su solicitud de renuncia ha terminado exitosamente", Severity.Success);
+		await Task.Delay(2000);
+		nav.NavigateTo($"/Projects/{personEmail}/", true);
+	}
+
+	private DateTime GetAgreementsDatesLapse(string employerEmail, string projectName)
+	{
+		var myQuery = from a in _agreements
+							where a.EmployeeEmail == personEmail && a.EmployerEmail == employerEmail
+							&& a.ProjectName == projectName
+							select new
+							{
+								Date = a.ContractStartDate
+							};
+		DateTime employeeStartDate = (DateTime)myQuery.FirstOrDefault().Date;
+		return employeeStartDate;
+	}
+
+	private int CalculateDatesDifference(DateTime employeeStartDate)
+	{
+		DateTime currentLocalTime = DateTime.Now;
+		int daysDifference = (currentLocalTime - employeeStartDate).Days;
+		return daysDifference;
+	}
+
+	private int CalculateDaysLeft(int dayslapsed)
+	{
+		int daysLeft = 0;
+		// 92 and 183 days are approximately 3 and 6 months respectively
+		if (dayslapsed >= 92 && dayslapsed < 183)
+		{
+			daysLeft = 7;
+		}
+
+		else if (dayslapsed >= 183 && dayslapsed < 365)
+		{
+			daysLeft = 15;
+		}
+		else if (dayslapsed >= 365)
+		{
+			daysLeft = 30;
+		}
+		return daysLeft;
+	}
+
+	private DateTime SetContractLastDay(string employerEmail, string projectName)
+	{
+		DateTime contractEndDate = DateTime.Now;
+		DateTime myDateTime = GetAgreementsDatesLapse(employerEmail, projectName);
+		int myDiff = CalculateDatesDifference(myDateTime);
+		myDiff = CalculateDaysLeft(myDiff);
+		contractEndDate = contractEndDate.AddDays(myDiff);
+		return contractEndDate;
+	}
+
+	private IEnumerable<Agreement> RetrieveEmployeeContract(string employerEmail, string projectName)
+	{
+		IEnumerable<Agreement> myAgreement = new List<Agreement>();
+		myAgreement = from A in _agreements
+							where A.IsEnabled == 1 && A.EmployerEmail == employerEmail &&
+							A.EmployeeEmail == personEmail && A.ProjectName == projectName
+							select A;
+		return myAgreement;
+	}
+
+	private Agreement SetAgreementInfo(IEnumerable<Agreement> myAgreement, DateTime EndDate)
+	{
+		string myEmployeeEmail = myAgreement.FirstOrDefault().EmployeeEmail;
+		string myEmployerEmail = myAgreement.FirstOrDefault().EmployerEmail;
+		string myProjectName = myAgreement.FirstOrDefault().ProjectName;
+		DateTime? myContractStartDate = myAgreement.FirstOrDefault().ContractStartDate;
+		string myContractType = myAgreement.FirstOrDefault().ContractType;
+		int myMountPerHour = myAgreement.FirstOrDefault().MountPerHour;
+		DateTime? myContractFinishDate = EndDate;
+		int myIsEnabled = myAgreement.FirstOrDefault().IsEnabled;
+		string myJustification = myAgreement.FirstOrDefault().Justification;
+		Agreement employeeAgreement = new Agreement(myEmployeeEmail, myEmployerEmail, myProjectName,
+			myContractStartDate, myContractType, myMountPerHour, myContractFinishDate, myIsEnabled, myJustification);
+		return employeeAgreement;
+	}
+
+	private async Task<DateTime> UpdateEmployeeAgreement(string employerEmail, string projectName)
+	{
+		IEnumerable<Agreement> myAgreement = RetrieveEmployeeContract(employerEmail, projectName);
+		DateTime endDate = SetContractLastDay(employerEmail, projectName);
+		Agreement employeeAgreement = SetAgreementInfo(myAgreement, endDate);
+		await AgreementService.UpdateAgreementStatus(employeeAgreement);
+		return endDate;
+	}
+
+	private async Task CheckToDesactivateAgreements()
+	{
+		IEnumerable<Agreement?> erasableAgreements = await AgreementService.GetErasableAgreeements(personEmail);
+		if (erasableAgreements.Length() != 0)
+		{
+			string justification = "Renuncia";
+			foreach (var agree in erasableAgreements)
+			{
+				await AgreementService.DesactivateAgreement(personEmail, agree.EmployerEmail, agree.ProjectName, justification);
+			}
+		}
+	}
+
+	private void SendEmailToEmployee(Agreement agreementInfo, DateTime endDate)
+	{
+		IList<string> employeeInfo = CreateEmailBody(agreementInfo, endDate);
+		EmailObject emailObject = new EmailObject("","","","",personEmail);
+		EmailService.SendQuittingEmailToEmployee(emailObject, employeeInfo);
+
+	}
+
+	private void SendEmailToEmployer(Agreement agreementInfo, DateTime endDate)
+	{
+		IList<string> employeeInfo = CreateEmailBody(agreementInfo, endDate);
+		EmailObject emailObject = new EmailObject("","","","",agreementInfo.EmployerEmail.Split(",")[0]);
+		EmailService.SendQuittingEmailToEmployer(emailObject, employeeInfo);
+	}
+
+	private IList<string> CreateEmailBody(Agreement agreementInfo, DateTime endDate)
+	{
+		IList<string> employeeInfo = new List<string>();
+		string fullEmployerName = agreementInfo.EmployerEmail.Split(",")[1] + " " + agreementInfo.EmployerEmail.Split(",")[2] + " " + agreementInfo.EmployerEmail.Split(",")[3];
+		employeeInfo.Add(personEmail);
+		employeeInfo.Add(agreementInfo.ProjectName);
+		employeeInfo.Add(DateTime.Now.ToShortDateString());
+		employeeInfo.Add(endDate.ToShortDateString());
+		employeeInfo.Add(fullEmployerName);
+		return employeeInfo;
+	}
+}

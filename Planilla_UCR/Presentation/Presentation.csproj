@@ -1,0 +1,55 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFramework>net5.0</TargetFramework>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Content Remove="C:\Users\User\.nuget\packages\chartjs.blazor.fork\2.0.2\contentFiles\any\netstandard2.1\wwwroot\ChartJsBlazorInterop.js" />
+	  <Content Remove="Projects\Pages\EmployeeProjectList.razor" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+		<SupportedPlatform Include="browser" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Blazored.FluentValidation" Version="2.0.3" />
+		<PackageReference Include="Blazored.FluentValidation" Version="2.0.3" />
+		<PackageReference Include="BlazorInputFile" Version="0.2.0" />
+		<PackageReference Include="ChartJs.Blazor.Fork" Version="2.0.2" />
+		<PackageReference Include="ClosedXML" Version="0.96.0" />
+		<PackageReference Include="CsvHelper" Version="27.2.1" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="5.0.11" />
+		<PackageReference Include="MudBlazor" Version="5.1.5" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="5.0.11" />
+		<PackageReference Include="PeterLeslieMorris.Blazor.Validation" Version="1.7.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="5.0.11" />
+		<PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="5.0.11" />
+		<PackageReference Include="Radzen.Blazor" Version="3.11.9" />
+		<PackageReference Include="MudBlazor" Version="5.1.5" />
+		<PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
+		<PackageReference Include="System.Text.Json" Version="5.0.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Application\Application.csproj" />
+		<ProjectReference Include="..\Domain\Domain.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <UpToDateCheckInput Remove="Projects\Pages\EmployeeProjectList.razor" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <_ContentIncludedByDefault Remove="Projects\Pages\EmployeeProjectList.razor" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="Dashboard\Components\BarChart.razor" />
+	  <None Include="Dashboard\Components\PieChart.razor" />
+	  <None Include="Projects\Components\EmployeeProjectList.razor" />
+	</ItemGroup>
+
+</Project>

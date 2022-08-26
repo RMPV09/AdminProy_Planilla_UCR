@@ -1,0 +1,230 @@
+﻿@page "/Loggin"
+@using Presentation.Core.Components
+@using Application.People
+@using Domain.People.Entities
+@using System.Text.RegularExpressions
+@using System.ComponentModel.DataAnnotations
+@using Shared.Models
+@using Application.Authentication
+@using Domain.Authentication.DTOs
+@using Application.ContextMenu
+@using Application.Email
+@using Application.Employers
+@using Application.Authorization;
+@using Application.Authorization.Implementations;
+
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+@inject IPersonService PersonService
+@inject IAuthenticationService AuthenticationService
+@inject IContextMenuService ContexService
+@inject IDialogService DialogService
+@inject IEmailServices EmailService
+@inject IEmployerService EmployerService
+@inject IAuthorizationServices AuthorizationService
+
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: "#"),
+        new BreadcrumbItem("Ingresar",  href: null, disabled: true),
+    };
+}
+<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+<MudGrid>
+    <MudItem xs="10" sm="12">
+    <MudPaper Elevation="0" Class="mx-auto pa-3 rounded" Height="380px" Width="50%" Outlined="false">
+        <MudSpacer></MudSpacer>
+        <MudText Align="Align.Center" Typo="Typo.h6">Ingresar a PlanillaUCR</MudText>
+        <br />
+        <MudForm @ref="form">
+        <MudGrid>
+            <MudItem xs="2"></MudItem>
+            <MudItem xs="8">
+                <MudTextField @bind-Value="accountData.Email" Label="Correo electrónico" Required="true" RequiredError="Campo requerido" Variant="Variant.Outlined"></MudTextField>
+            </MudItem>
+            <MudItem xs="2"></MudItem>
+            <MudItem xs="2"></MudItem>
+           <MudItem xs="8">
+                <MudTextField @bind-Value="accountData.Password" Label="Contraseña" Required="true" RequiredError="Campo requerido" InputType="InputType.Password" Variant="Variant.Outlined"></MudTextField>
+            </MudItem>
+            <MudItem xs="2"></MudItem>
+             <MudItem xs="2"></MudItem>
+            @*Create buton *@
+                <MudItem xs="8">
+                <MudButton Disabled="@snackHandler._saving" OnClick="ValidateRegisterAccount" Variant="Variant.Filled" Color="Color.Primary">
+                        <MudText> &emsp;&emsp;&emsp;&emsp;&emsp; Iniciar sesión &emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp;&nbsp;</MudText>
+                </MudButton> 
+
+            <MudItem xs="2"></MudItem>
+            <MudItem xs="2"></MudItem>
+            <MudItem xs="8"></MudItem>
+               <br />
+                <MudButton OnClick="GoToCreateAccount" Variant="Variant.Filled" Color="Color.Transparent">
+                <MudText>&emsp;&emsp;&emsp; Registrar empleador &emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp; </MudText>
+                </MudButton>
+            </MudItem>
+           <MudItem xs="2"></MudItem>
+        </MudGrid>
+        </MudForm>
+    </MudPaper>
+    </MudItem>
+    <MudItem xs="3">
+    </MudItem>
+    <MudDialog @bind-IsVisible="visible" Options="dialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Email" Color="@Color.Primary" Class="mr-2"/> Si desea reactivar su cuenta por favor ingrese el código de confirmación enviado a su email: 
+            </MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudItem xs="12" Class="d-flex justify-center align-center">
+                <MudTextField @bind-Value="confirmationCodeEmployer" Label="Código de confirmación" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido" ></MudTextField>
+            </MudItem>
+            </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AcceptConfirmationCode" Class="px-10">Aceptar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="ResendConfirmationCode" Class="px-10">Reenviar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CloseDialog" Class="px-10">No reactivar</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+
+</MudGrid>
+
+@code{
+    MudForm form;
+    AccountDTO accountData = new AccountDTO("","");
+    SnackHandler snackHandler = new SnackHandler();
+    Person personInfo;
+    private bool visible;
+    private bool open;
+    private void OpenDialog() => visible = true;
+    void CloseDialog() => visible = false;
+    private DialogOptions dialogOptions = new() { FullWidth = true };
+    Random random = new Random();
+    public string confirmationCodeEmployer { get; set; }
+    public string confirmationCodeEmail { get; set; }
+
+    async Task ValidateRegisterAccount()
+    {
+        snackHandler._saving = true;
+        await form.Validate();
+        if (form.IsValid){
+            personInfo = new Person("", "", "", "", Int32.Parse("0"), "", "", "",1);
+            personInfo.Email = accountData.Email;
+            personInfo = await PersonService.GetInfoPerson(personInfo);
+            bool emailExist = await AuthenticationService.EmailIsAlreadyRegistered(accountData.Email);
+            if (personInfo != null)
+            {
+                if (emailExist && personInfo.IsEnabled==1)
+                {
+                    bool validPassword = await AuthenticationService.SignInRequestAsync(accountData, true);
+                    if (!validPassword)
+                    {
+                        ShowSnackNotification("Contraseña incorrecta", Severity.Error);
+                    }
+                }
+                if (!emailExist && personInfo.IsEnabled==0)
+                {
+                    confirmationCodeEmail = CreateConfirmationCode();
+                    OpenDialog();
+                    EmailService.ReactivateAccountEmail("El siguiente código es el que tienes que ingresar para verificar tu email para la reactivación de tu cuenta:  " + confirmationCodeEmail, accountData.Email);
+                } 
+            }
+            else if (!emailExist && personInfo == null)
+            {
+                ShowSnackNotification("No posee una cuenta registrada", Severity.Error);
+            } 
+        }
+        snackHandler._saving = false;
+    }
+
+    private string CreateConfirmationCode()
+    {
+        int confirmationCode = random.Next(100000,999999);
+        string confirmationCodeString = confirmationCode.ToString();
+        return confirmationCodeString;
+    }
+
+    async Task ResendConfirmationCode(){
+
+        OpenDialog();
+        open = true;
+        if (open)
+        {
+            confirmationCodeEmail = CreateConfirmationCode();
+            EmailService.ReactivateAccountEmail("El siguiente código es el que tienes que ingresar para verificar tu email para la reactivación de tu cuenta:  " + confirmationCodeEmail, accountData.Email);
+            ShowSnackNotification("Se ha enviado el nuevo correo", Severity.Success);
+            if (confirmationCodeEmployer!=null)
+            {
+                await AcceptConfirmationCode();
+                open = false;
+                CloseDialog();
+            } 
+        }
+        else 
+        {
+            ShowSnackNotification("No se ha enviado el nuevo correo, espere por favor", Severity.Error);
+        }  
+    }
+
+    async Task AcceptConfirmationCode(){
+        OpenDialog();
+        open = true;
+        if (open && confirmationCodeEmployer!=null)
+        {
+            if( ConfirmationCodeMatch(confirmationCodeEmployer, confirmationCodeEmail))
+            {  
+                personInfo.Email = accountData.Email;
+                EmployerService.UpdateEmployer(personInfo.Email);
+                ShowSnackNotification("Coincide el código de confirmación", Severity.Success);
+                personInfo.IsEnabled = 1;
+                await PersonService.CreatePersonAsync(personInfo);
+                await EmployerService.CreateEmployerAsync(personInfo.Email);
+                await AuthenticationService.RegisterRequestAsync(accountData);
+                await AuthorizationService.AssignRole(accountData.Email, "Employer");
+                ShowSnackNotification("Cuenta para "+personInfo.Name+" reactivada", Severity.Success);
+                await AuthenticationService.SignInRequestAsync(accountData, true);
+                open = false;
+                CloseDialog();
+            }
+            else 
+            {
+                ShowSnackNotification("No coincide el código de confirmación", Severity.Error);
+            }      
+        }
+    }
+
+    bool ConfirmationCodeMatch(string confirmationCodeEmployer, string confirmationCodeString)
+    {
+        bool valid = true;
+        if (confirmationCodeEmployer != confirmationCodeString)
+        {
+            valid = false;
+        }
+        return valid;
+    }
+
+    private void GoToCreateAccount()
+    {
+        nav.NavigateTo("/Register_Form");
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+}

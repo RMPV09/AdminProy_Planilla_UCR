@@ -1,0 +1,184 @@
+﻿@using Application.People
+@using Domain.People.Entities
+@using Application.Employees
+@using Application.ReportOfHours
+@using Domain.ReportOfHours.Entities
+@using Application.ContextMenu
+@using Application.Agreements
+@using Domain.Agreements.Entities
+@using System.Threading;
+
+
+@inject NavigationManager nav
+@inject IReportOfHoursService HoursReportService
+@inject IContextMenuService ContextMenuService
+@inject IAgreementService AgreementService
+@inject IPersonService PersonService
+@inject ISnackbar Snackbar
+
+@page "/Approve_Hours/{email}/{projectName}"
+@if(_loading) {
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+       
+    </MudPaper>
+}else{
+    @if (!_loading)
+    {
+        List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Proyectos", href: $"/Projects/{email}"),
+            new BreadcrumbItem(@projectName, href: $"/Projects/{email}/{projectName}"),
+            new BreadcrumbItem("Aprobar horas", href: null, disabled: true)
+        }; 
+        <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+        <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+        </MudPaper>
+        if (!_empty)
+        {
+                <MudTable @ref="@_table" Items="@_elements" RowsPerPage="4" MultiSelection="true" @bind-SelectedItems="_selectedItems" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" Filter="new Func<HoursReport,bool>(FilterFunction)">
+                    <ToolBarContent>
+                            <MudText Align="Align.Center" Typo="Typo.h6">Horas por aprobar</MudText>
+                            <MudSpacer />
+                            <MudTextField @bind-Value="searchString" Placeholder="Buscar fecha" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    </ToolBarContent> 
+                    <HeaderContent>
+                        <MudTh>Nombre proyecto</MudTh>
+                        <MudTh>Nombre empleado</MudTh>
+                        <MudTh>Fecha</MudTh>
+                        <MudTh>Horas</MudTh>
+                    </HeaderContent>
+
+                    <RowTemplate>
+                         <MudTd DataLabel="Nombre proyecto">@context.ProjectName</MudTd>
+                         <MudTd DataLabel="Nombre empleado"> @context.EmployeeEmail.Split(",")[1] </MudTd>
+                         <MudTd DataLabel="Fecha">@context.ReportDate.Value.ToShortDateString()</MudTd>
+                         <MudTd DataLabel="Horas">@context.ReportHours</MudTd>
+                    </RowTemplate>
+                <PagerContent>
+                    <MudPagination SelectedChanged="PageChanged" Count="@((_table.GetFilteredItemsCount() + _table.RowsPerPage - 1) / _table.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+                </PagerContent>
+                </MudTable>
+                <br>
+                <MudToolBar DisableGutters="true" Class="gap-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="UpdateApprovedHours">Aprobar</MudButton>
+            </MudToolBar>
+        }else
+        {
+            <MudText Align="Align.Center" Typo="Typo.h6">
+                No existen horas por aprobar en este proyecto
+            </MudText>
+        }
+    }
+}
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+    [Parameter]
+    public string projectName { get; set; }
+    [Parameter]
+    public bool last { get; set; } = false;
+    private bool _hidePosition;
+    private bool _loading = true;
+    private bool _empty = true;
+    public string searchString = "";
+    private List<HoursReport> _elements = new List<HoursReport>();
+    private MudTable<HoursReport> _table;
+    private HashSet<HoursReport> _selectedItems = new HashSet<HoursReport>();
+    private string _projectName { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ContextMenuService.SetProjectsContext(true,true, projectName, email, ContextMenuService.GetHoursEmployeeContext(), ContextMenuService.GetReportsContext());
+        await GetProjectHoursReport();
+        if (_elements.Length() != 0)
+        {
+            _empty = false;
+        }
+
+        _loading = false;
+    }
+
+    private async Task GetProjectHoursReport()
+    {
+        IList<Agreement> _employees = await AgreementService.GetProjectAgreements(ContextMenuService.GetProjectsContext(), email);
+        _employees = _employees.Where(e => e.ContractType == "Servicios profesionales").ToList();
+        foreach (Agreement employee in _employees) {
+            IEnumerable<HoursReport> reports = await HoursReportService.GetProjectHoursReport(projectName, employee.EmployeeEmail, email);
+            foreach (HoursReport employeeReport in reports)
+            {
+                employeeReport.EmployeeEmail +=  "," + await GetEmployeeName(employeeReport.EmployeeEmail);
+                _elements.Add(employeeReport);
+            }
+        }
+    }
+
+    private void PageChanged(int i)
+    {
+        _table.NavigateTo(i - 1);
+    }
+
+    private bool FilterFunction(HoursReport element) => Filter(element, searchString);
+
+    private bool Filter(HoursReport element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+
+        string dateString = element.ReportDate.Value.ToShortDateString();
+        if (dateString.Contains(searchString))
+            return true;
+        return false;
+    }
+
+    private async Task<string> GetEmployeeName(string email)
+    {
+        string fullName = "";
+        IEnumerable<Person> employee =  await PersonService.GetPersonByEmail(email);
+        Person employeeInfo = employee.FirstOrDefault();
+        if(employee.Length() != 0)
+        {
+            fullName =  employeeInfo.Name +" "+ employeeInfo.LastName1 +" "+ employeeInfo.LastName2;
+        }
+        else
+        {
+            fullName = "";
+        }
+        return fullName;
+    }
+
+    private async Task UpdateApprovedHours()
+    {
+        if (_selectedItems.Length() > 0)
+        {
+            foreach (var element in _selectedItems)
+            {
+                element.Approved = 1;
+                element.EmployeeEmail = element.EmployeeEmail.Split(",")[0];
+                await HoursReportService.UpdateReport(element);
+                _elements.Remove(element);
+            }
+            Snackbar.Add("Horas aprobadas", Severity.Success);
+            await Task.Delay(2000);
+        }
+        else
+        {
+            Snackbar.Add("Por favor seleccione las horas a aprobar", Severity.Error);
+            await Task.Delay(2000);
+        }
+        _selectedItems.Clear();
+        if (_elements.Length() == 0)
+        {
+            last = true;
+            _empty = true;
+            InvokeAsync(StateHasChanged);
+        }
+        else
+        {
+            nav.NavigateTo($"/Approve_Hours/{email}/{projectName}", true);
+        }
+    }
+}

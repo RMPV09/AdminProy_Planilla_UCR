@@ -1,0 +1,45 @@
+﻿@page "/Projects/{email}/{projectName}/Benefits"
+@using Presentation.Benefits.Components
+@inject NavigationManager nav
+
+<AuthorizeView Roles = "Employer">
+    <Authorized>
+        <BenefitMainPage employerEmail="@email" projectName="@projectName"></BenefitMainPage>
+    </Authorized>
+    <NotAuthorized>
+
+    </NotAuthorized>
+</AuthorizeView>
+
+<AuthorizeView Roles = "Employee">
+    <Authorized>
+        @if (selectedWindow)
+        {
+            <EmployeesBenefits employeeEmail="@email" projectName="@projectName" SendTableState="ReceiveTableState"></EmployeesBenefits>
+        }
+        else
+        {
+           <AvailableBenefits employeeEmail="@email" projectName="@projectName" SendTableState="ReceiveTableState"></AvailableBenefits>
+        }
+    </Authorized>
+    <NotAuthorized>
+
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public string projectName { get; set; }
+
+    [Parameter]
+    public string email { get; set; }
+
+    private bool selectedWindow = true;
+
+    public EventCallback<string> conmuteWindow => EventCallback.Factory.Create<string>(this, ReceiveTableState);
+
+     public void ReceiveTableState()
+    {
+        selectedWindow = !selectedWindow;
+    }
+}

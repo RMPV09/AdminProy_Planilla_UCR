@@ -1,0 +1,11 @@
+﻿<MudOverlay Visible="IsOpen" DarkBackground="true" Absolute="false" ZIndex="1200">
+    <MudPaper Class="d-flex flex-column align-center pa-10" Style="max-width: 80vw; height: auto; overflow: auto; max-height: 95vh; ">
+       @ChildContent
+    </MudPaper>
+</MudOverlay>
+@code {
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+    [Parameter]
+    public bool IsOpen { get; set; }
+}

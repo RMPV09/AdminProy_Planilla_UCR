@@ -1,0 +1,203 @@
+﻿@using Application.Subscriptions
+@using Domain.Subscriptions.Entities
+@using Domain.Subscribes.Entities
+@using Application.Subscribes
+@using Presentation.Deductions.Components
+@using System.Globalization
+@using Application.ContextMenu
+@inject ISnackbar Snackbar
+@inject NavigationManager nav
+@inject ISubscriptionService SubscriptionService
+@inject ISubscribeService SubscribeService
+@inject IContextMenuService ContextMenuService
+
+@if(_loading) {
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+    </MudPaper>
+}else{
+    @if (!_loading)
+    {
+        List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Proyectos", href: $"/Projects/{employeeEmail}"),
+            new BreadcrumbItem(@projectName, href: $"/Projects/{employeeEmail}/{ContextMenuService.GetEmployerEmailContext()}/{projectName}"),
+            new BreadcrumbItem("Deducciones voluntarias",  href: null, disabled: true)
+        }; 
+        <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+        <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+        </MudPaper>
+
+        if(_empty)
+        {
+              <AvailableDeductionsError employeeEmail="@employeeEmail" projectName="@projectName" SendTableState="SendConmuteSignal"></AvailableDeductionsError>
+        }else
+        {
+            <MudTable @ref="_mudTable" Items="@_elements" RowsPerPage="4" MultiSelection="true" @bind-SelectedItems="_selectedItems1" Hover="true" Loading="@_loading" LoadingProgressColor="Color.Info" Filter="new Func<Subscription,bool>(FilterFunc1)">
+                <ToolBarContent>
+                        <MudButton Color="Color.Tertiary"> Deducciones voluntarias disponibles</MudButton>
+                        <MudButton OnClick="SendConmuteSignal"> Mis deducciones voluntarias </MudButton>
+                        <MudSpacer />
+                        <MudTextField @bind-Value="_searchString1" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                </ToolBarContent> 
+                    
+                <HeaderContent>
+                    <MudTh>Deducción voluntaria</MudTh>
+                    <MudTh>Descripción</MudTh>
+                    <MudTh  Style="text-align:right">Monto sugerido</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="Deducción voluntaria">@context.SubscriptionName</MudTd>
+                    <MudTd DataLabel="Descripción" Style="width: 50%;">
+                        <MudItem xs="8">
+                            <MudTextField @bind-Value="context.SubscriptionDescription" Lines="2"  T="string" Variant="Variant.Text" ReadOnly = "true"></MudTextField>
+                        </MudItem>
+                    </MudTd>
+                    <MudTd DataLabel="Monto sugerido" Style="text-align:right"> @cultureCR.NumberFormat.CurrencySymbol @CostFormat(context.Cost)</MudTd>
+                </RowTemplate>
+
+                <PagerContent>
+                    <MudPagination SelectedChanged="PageChanged" Count="@((_mudTable.GetFilteredItemsCount() + _mudTable.RowsPerPage - 1) / _mudTable.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+                </PagerContent>
+            </MudTable>
+            <br>
+            <MudButton Variant="Variant.Filled" OnClick="OpenDialog" Color="Color.Primary">
+                <MudText>
+                    Suscribirse
+                </MudText> 
+            </MudButton>
+        }
+
+        <MudDialog @bind-IsVisible="_visible" Options="dialogOptions">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Filled.AttachMoney" Color="@Color.Primary" Class="mr-2"/> Ingrese el monto a aportar</MudText>
+            </TitleContent>
+            <DialogContent>
+                @foreach (Subscription _element in _selectedItems1)
+                {
+                    <MudText>@_element.SubscriptionName</MudText>
+                    <MudNumericField Immediate="false" Label="Costo" Format="N2" Culture="@cultureCR" Variant="Variant.Outlined" @bind-Value=_element.Cost 
+                    Adornment="Adornment.Start" AdornmentText="@cultureCR.NumberFormat.CurrencySymbol" Required="true" RequiredError="Campo requerido" Min = "0.0" />
+                }
+            </DialogContent>
+            <DialogActions>
+                  <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Subscribe" Class="px-10">Aceptar</MudButton>
+                  <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CloseDialog" Class="px-10">Cancelar</MudButton>
+            </DialogActions>
+        </MudDialog>
+    }
+}
+
+@code {
+    private bool _hidePosition;
+    private bool _loading = true;
+    private bool _empty = true;
+    private string _searchString1 = "";
+    private IList<Subscription> _elements = new List<Subscription>();
+    private HashSet<Subscription> _selectedItems1 = new HashSet<Subscription>();
+    private MudTable<Subscription> _mudTable;
+    private Subscribe _subscribe = new Subscribe("", "", "", "", 0.0, DateTime.Now);
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    [Parameter]
+    public string projectName { get; set; }
+    [Parameter]
+    public string employeeEmail { get; set; }
+    [Parameter]
+    public EventCallback<string> SendTableState { get; set; }
+
+    private bool _visible;
+    private bool _open;
+
+    void CloseDialog() => _visible = false;
+    private DialogOptions dialogOptions = new() { FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        ContextMenuService.SetProjectsContext(true,true, projectName, ContextMenuService.GetEmployerEmailContext(), ContextMenuService.GetHoursEmployeeContext(), ContextMenuService.GetReportsContext());
+        _elements = await SubscriptionService.GetDeductionsByEmployee(employeeEmail, projectName);
+        if (_elements.Length() > 0)
+        {
+            _empty = false;
+            _subscribe.EmployeeEmail = employeeEmail;
+            _subscribe.ProjectName = projectName;
+        }
+        _loading = false;
+    }
+
+    private void PageChanged(int i)
+    {
+        _mudTable.NavigateTo(i - 1);
+    }
+
+    private bool FilterFunc1(Subscription element) => FilterFunc(element, _searchString1);
+
+    private bool FilterFunc(Subscription element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.ProjectName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private async Task SendConmuteSignal()
+    {
+        await SendTableState.InvokeAsync("");
+    }
+
+    private void OpenDialog()
+    {
+        if (_selectedItems1.Length() > 0)
+        {
+            _visible = true;
+        }
+        else
+        {
+            Snackbar.Add("Por favor seleccione los elementos a los que se desea suscribir", Severity.Warning);
+        }
+    } 
+
+    private async Task Subscribe()
+    {
+        CloseDialog();
+        IEnumerable<Subscribe> _actualSubscriptions = await SubscribeService.GetDeductionsByEmployee(employeeEmail, projectName);
+        foreach (Subscription subscription in _selectedItems1)
+        {
+            var _active = _actualSubscriptions.FirstOrDefault(e => e.EmployeeEmail == employeeEmail &&
+                e.EmployerEmail == subscription.EmployerEmail &&
+                e.SubscriptionName == subscription.SubscriptionName &&
+                e.EndDate == null);
+            if (_active == null)
+            {
+                _subscribe.EmployerEmail = subscription.EmployerEmail;
+                _subscribe.SubscriptionName = subscription.SubscriptionName;
+                _subscribe.Cost = subscription.Cost;
+                int error = SubscribeService.CreateSubscribe(_subscribe, 0);
+                if (error == 1)
+                {
+                    Snackbar.Add("Suscripción realizada con éxito", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("No se pudo suscribir a la deducción voluntaria", Severity.Warning);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Ya está suscrito a esta deducción voluntaria", Severity.Warning);
+            }
+        }
+        await SendConmuteSignal();
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+}

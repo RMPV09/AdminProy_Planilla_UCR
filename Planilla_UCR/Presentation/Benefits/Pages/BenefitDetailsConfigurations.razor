@@ -1,0 +1,318 @@
+﻿@page "/Projects/{employerEmail}/{projectName}/Benefits/{subscriptionName}"
+@using Application.Subscriptions
+@using Domain.Subscriptions.Entities
+@using Application.Subscribes
+@using Domain.Subscribes.Entities
+@using Application.Projects
+@using Domain.Projects.Entities
+@using Presentation.Core.Components
+@using Presentation.Benefits.Components
+@using System.Globalization
+@using Domain.People.Entities
+@using Application.People
+@using Application.Email
+
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+@inject ISubscriptionService SubscriptionService
+@inject ISubscribeService SubscribeService
+@inject IProjectService ProjectService
+@inject IEmailServices EmailService
+@inject IPersonService PersonService
+
+@{List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{employerEmail}"),
+        new BreadcrumbItem($"{projectName}", href: $"/Projects/{employerEmail}/{projectName}"),
+        new BreadcrumbItem("Beneficios", href: $"/Projects/{employerEmail}/{projectName}/Benefits"),
+        new BreadcrumbItem($"{subscriptionName}", href: null, disabled: true)
+    };
+}
+
+<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+
+@if (_loading)
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+    </MudPaper>
+}
+else
+{
+    <MudToolBar DisableGutters="true" Class="gap-4">
+        <MudSpacer></MudSpacer>
+        @if(_disabled)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="EnableForm"/>
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="DisableForm"/>
+        }
+        
+    </MudToolBar>
+    <MudGrid>
+        <MudItem xs="12" sm="12">
+            <MudPaper  Height="250px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+                @if (_disabled)
+                {
+                    <MudText Align="Align.Center" Typo="Typo.h6">Detalles del beneficio</MudText>
+                }
+                else
+                {
+                    <MudText Align="Align.Center" Typo="Typo.h6">Modificar beneficio</MudText>
+                }
+                <MudForm @ref="form">
+                <MudGrid>
+
+                <MudItem xs="2">
+                </MudItem>
+                <MudItem xs="8">
+                    <MudTextField @bind-Value="_newName" MaxLength="255" Label="Nombre" Variant="Variant.Outlined" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido"></MudTextField>
+                </MudItem>
+                <MudItem xs="2">
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>
+
+                <MudItem xs="4">
+                    <MudNumericField Immediate="true" Label="Costo" Format="N2" Culture="@cultureCR" Variant="Variant.Outlined" @bind-Value="_tempCost" 
+                    Adornment="Adornment.Start" AdornmentText="@cultureCR.NumberFormat.CurrencySymbol" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido" Min = "0.0"/>
+                </MudItem>
+
+                <MudItem xs="4">
+                    <MudTextField @bind-Value="_providerName"  MaxLength="255" Label="Organización" Variant="Variant.Outlined" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido"></MudTextField>
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>  
+
+                <MudItem xs="2"></MudItem>  
+
+                <MudItem xs="8">
+                    <MudTextField @bind-Value="_sDescription" MaxLength="600" Label="Descripcion" Lines="6" Variant="Variant.Outlined" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido"></MudTextField>
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>  
+                <MudItem xs="2"></MudItem>  
+
+                @if(_disabled == false)
+                {
+                    <MudItem xs="8" >
+                        <MudButton Disabled="@snackHandler._saving" OnClick="SaveBenefit" Variant="Variant.Filled" Color="Color.Primary">
+                            @if (snackHandler._saving)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                <MudText Class="ms-2">Modificando</MudText>
+                            }
+                            else
+                            {
+                                <MudText>Actualizar</MudText>
+                            }
+                        </MudButton>
+                        <MudButton Disabled="true"> </MudButton>
+                        <MudButton OnClick="GoToMain" Variant="Variant.Filled" Color="Color.Transparent">
+                                <MudText>Cancelar</MudText>
+                        </MudButton>
+                    </MudItem>
+                }
+                </MudGrid>
+            </MudForm>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudDialog @bind-IsVisible="_visible" Options="dialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6">
+                Los empleados afectados son</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudTable @ref="_table" Items="@_affectedEmployees" FixedHeader="@fixed_header" FixedFooter="@fixed_footer" Height="@(fixed_header || fixed_footer ?"300px":"")">
+                <HeaderContent>
+                    <MudTh>Beneficio</MudTh>
+                    <MudTh>Email</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Beneficio"> @context.SubscriptionName</MudTd>
+                    <MudTd DataLabel="Email"> @context.EmployeeEmail</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </DialogContent>
+        <DialogActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CloseDialog" Class="px-10">Aceptar</MudButton>
+        </DialogActions>
+    </MudDialog>
+}
+
+
+@code {
+    private bool _loading = true;
+    private bool _disabled = true;
+    private string _newName = "";
+    private double? _tempCost;
+    private string _providerName = "";
+    private string _sDescription = "";
+    private bool _visible;
+    private bool _open;
+    private IList<Subscribe> _employees = new List<Subscribe>();
+    private IList<Subscribe> _affectedEmployees = new List<Subscribe>();
+    private Project _project = new Project("","","",0,0,"",1);
+    public Subscription subscription = new Subscription("","","","","",0.0,1,1);
+    MudForm form;
+    private MudTable<Subscribe> _table;
+    SnackHandler snackHandler = new SnackHandler();
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+    [Parameter] public string subscriptionName { get; set; }
+
+    void CloseDialog() => _visible = false;
+    private void OpenDialog() => _visible = true;
+    private DialogOptions dialogOptions = new() { FullWidth = true };
+    bool fixed_header = true;
+    bool fixed_footer = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        subscription = await SubscriptionService.GetSubscription(employerEmail, projectName, subscriptionName);
+        _project = await ProjectService.GetProject(employerEmail, projectName);
+        if (subscription != null)
+        {
+            _newName = subscription.SubscriptionName;
+            _tempCost = subscription.Cost;
+            _providerName =subscription.ProviderName;
+            _sDescription = subscription.SubscriptionDescription;
+            _loading = false;
+        }
+    }
+
+    private async Task SaveBenefit()
+    {
+        snackHandler._saving = true;
+        await form.Validate();
+        bool valid = await ValidName();
+        if (form.IsValid && valid)
+        {
+            snackHandler._saving = false;
+            subscription.Cost = (double)_tempCost;
+            subscription.ProviderName = _providerName;
+            subscription.SubscriptionDescription = _sDescription;
+            SubscriptionService.ModifySubscription(subscription, _newName);
+            subscription.SubscriptionName = _newName;
+            subscriptionName = _newName;
+            await GetAffectedEmployees(subscription);
+            ShowSnackNotification("Beneficio " + subscription.SubscriptionName + " modificadO", Severity.Success);
+            if (_affectedEmployees.Length() > 0)
+            {
+                OpenDialog();
+            }
+            DisableForm();
+        }
+        snackHandler._saving = false;
+    }
+
+    private async Task<bool> ValidName()
+    {
+        bool valid = true;
+        Subscription tempSubscription = await SubscriptionService.GetSubscription(employerEmail, projectName, _newName);
+        if (tempSubscription != null && _newName != subscription.SubscriptionName)
+        {
+            valid = false;
+            ShowSnackNotification("El nombre del beneficio " + _newName + " ya está en uso", Severity.Error);
+            DisableForm();
+        }
+        return valid;
+    }
+
+    private void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    private void GoToMain()
+    {
+        nav.NavigateTo($"/Projects/{employerEmail}/{projectName}/Benefits");
+    }
+
+    private void EnableForm()
+    {
+        _disabled = false;
+        _newName = subscription.SubscriptionName;
+        _tempCost = subscription.Cost;
+        _providerName =subscription.ProviderName;
+        _sDescription = subscription.SubscriptionDescription;
+    }
+
+    private void DisableForm()
+    {
+        _disabled = true;
+        _newName = subscription.SubscriptionName;
+        _tempCost = subscription.Cost;
+        _providerName =subscription.ProviderName;
+        _sDescription = subscription.SubscriptionDescription;
+    }
+
+    private async Task GetAffectedEmployees(Subscription subscription)
+    {
+        _employees = (await SubscribeService.GetEmployeesBySubscription
+            (subscription.EmployerEmail, subscription.ProjectName, subscription.SubscriptionName)).ToList();
+        _employees = _employees.Where(e => e.EndDate == null).ToList();
+        foreach (Subscribe subscribe in _employees)
+        {
+            SubscribeService.DeleteSubscribe(subscribe);
+            Subscribe newSubscribe = new Subscribe(subscribe.EmployeeEmail, subscribe.EmployerEmail, subscribe.ProjectName, subscribe.SubscriptionName, subscription.Cost, DateTime.Now);
+            SubscribeService.AddSubscribe(newSubscribe);
+            IList<Subscribe> employeeBenefits = (await SubscribeService.GetBenefitsByEmployee(subscribe.EmployeeEmail, subscribe.ProjectName)).ToList();
+            if (employeeBenefits.Sum(e => e.Cost) > _project.MaximumAmountForBenefits)
+            {
+                _affectedEmployees.Add(subscribe);
+            }
+        }
+        await SendEmployeeEmails();
+        await SendEmployerEmail();
+    }
+
+    private async Task SendEmployeeEmails()
+    {
+        Person employer = await PersonService.GetPerson(employerEmail);
+        string employerFullName = employer.Name + " " + employer.LastName1 + " " + employer.LastName2;
+        foreach (Subscribe subscribe in _affectedEmployees)
+        {
+            Person employee = await PersonService.GetPerson(subscribe.EmployeeEmail);
+            string employeeFullName = employee.Name + " " + employee.LastName1 + " " + employee.LastName2;
+            EmailObject newEmail = new EmailObject(employeeFullName, employerFullName, subscribe.ProjectName, "", subscribe.EmployeeEmail);
+            EmailService.SendEmployeeBenefitNotification(newEmail, subscribe.SubscriptionName);
+        }
+    }
+
+    private async Task SendEmployerEmail()
+    {
+        IList<Person> _employeesEmail = new List<Person>();
+        foreach (Subscribe subscribe in _affectedEmployees)
+        {
+            Person employee = await PersonService.GetPerson(subscribe.EmployeeEmail);
+            _employeesEmail.Add(employee);
+            string employeeFullName = employee.Name + " " + employee.LastName1 + " " + employee.LastName2;
+        }
+        Person employer = await PersonService.GetPerson(employerEmail);
+        string employerFullName = employer.Name + " " + employer.LastName1 + " " + employer.LastName2;
+        EmailObject newEmail = new EmailObject("", employerFullName, projectName, "", employerEmail);
+        EmailService.SendEmployerBenefitNotification(newEmail, _employeesEmail, subscription.SubscriptionName);
+    }
+}

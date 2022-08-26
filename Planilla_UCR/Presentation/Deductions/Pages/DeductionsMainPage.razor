@@ -1,0 +1,45 @@
+﻿@page "/Projects/{email}/{projectName}/Deductions"
+@using Presentation.Deductions.Components
+@inject NavigationManager nav
+
+<AuthorizeView Roles = "Employer">
+    <Authorized>
+        <DeductionMainPage employerEmail="@email" projectName="@projectName"></DeductionMainPage>
+    </Authorized>
+    <NotAuthorized>
+
+    </NotAuthorized>
+</AuthorizeView>
+
+<AuthorizeView Roles = "Employee">
+    <Authorized>
+        @if (selectedWindow)
+        {
+            <EmployeesDeductions employeeEmail="@email" projectName="@projectName" SendTableState="ReceiveTableState"></EmployeesDeductions>
+        }
+        else
+        {
+           <AvailableDeductions employeeEmail="@email" projectName="@projectName" SendTableState="ReceiveTableState"></AvailableDeductions>
+        }
+    </Authorized>
+    <NotAuthorized>
+
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public string projectName { get; set; }
+
+    [Parameter]
+    public string email { get; set; }
+
+    private bool selectedWindow = true;
+
+    public EventCallback<string> conmuteWindow => EventCallback.Factory.Create<string>(this, ReceiveTableState);
+
+     public void ReceiveTableState()
+    {
+        selectedWindow = !selectedWindow;
+    }
+}

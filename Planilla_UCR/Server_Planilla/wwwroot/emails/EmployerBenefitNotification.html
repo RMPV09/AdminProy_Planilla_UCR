@@ -1,0 +1,65 @@
+﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Page Title</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+
+        body {
+            font-family: Arial;
+            margin: 0;
+            text-align: left;
+        }
+
+
+        .header {
+            padding: 10px;
+            text-align: center;
+            background: #00695c;
+            color: white;
+            font-size: 25px;
+        }
+
+
+        .content {
+            padding: 20px;
+        }
+
+        table.center {
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>PlanillaUCR</h1>
+    </div>
+
+    <div>
+        Señor(a): [employerName]
+        <br>
+        Reciba un cordial saludo
+        <br>
+
+    </div>
+
+    <div class="text">
+        Por este medio se adjunta la lista de empleados que están excediendo el límite máximo de beneficios
+        en el proyecto [projectName] debido a la última modificación del beneficio [benefitName]:
+        <br>
+    </div>
+
+    <H3 style="text-align:center;"> Empleados afectados </H3>
+    <table BORDER CELLPADDING=10 CELLSPACING=0 class="center">
+        <tr>
+            <th> &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;Nombre &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp;</th>
+            <th> &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;Email &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp;</th>
+        </tr>
+        [employees]
+    </table>
+    <br>
+</body>

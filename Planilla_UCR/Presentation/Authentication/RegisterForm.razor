@@ -1,0 +1,339 @@
+﻿@page "/Register_Form"
+@using Domain.People.Entities
+@using Domain.Employees.Entities 
+@using Domain.Employees.DTOs
+@using Application.People
+@using Application.Employees
+@using Application.Employers
+@using Presentation.Shared.Models
+@using Presentation.Core.Components
+@using System.Text.RegularExpressions
+@using System.ComponentModel.DataAnnotations
+@using Application.Authorization;
+@using Application.Authorization.Implementations;
+@using Application.Authentication;
+@using Domain.Authentication.DTOs
+@using Application.Email
+
+@inject NavigationManager nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IPersonService PersonService
+@inject IEmployeeService EmployeeService
+@inject IEmployerService EmployerService
+@inject IAuthenticationService AuthenticationService
+@inject IAuthorizationServices AuthorizationService
+@inject IEmailServices EmailService
+
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: "#"),
+        new BreadcrumbItem("Cuenta",  href: null, disabled: true),
+    };
+}
+<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+
+<MudGrid>
+    <MudItem xs="10" sm="12">
+        <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+            <MudSpacer></MudSpacer>
+            <MudText Align="Align.Center" Typo="Typo.h6">Registrar cuenta empleador</MudText>
+            <MudForm @ref="form">
+                    <MudGrid>
+                    @*Small fields *@
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.Name" Label="Nombre" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.Email" Label="Email" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.LastName1" Label="Primer Apellido" Variant="Variant.Outlined"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.LastName2" Label="Segundo Apellido" Variant="Variant.Outlined"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+                     <MudItem xs="2"></MudItem>
+                     <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.PhoneNumber" Label="Teléfono" Variant="Variant.Outlined" ></MudTextField>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.Ssn" Label="Cedula" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"></MudTextField>
+                    </MudItem>
+                      <MudItem xs="2"></MudItem>
+                    @*Large fields *@
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="8">
+                        <MudTextField @bind-Value="personInfo.Adress" Label="Dirección" Variant="Variant.Outlined"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="8">
+                        <MudTextField @bind-Value="personInfo.BankAccount" Label="Cuenta Bancaria" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"></MudTextField>
+                    <MudDivider />
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="4">
+                       <MudTextField @bind-Value="accountData.Password" Label="Contraseña" Variant="Variant.Outlined" @ref="pwField1" InputType="InputType.Password"  Required="true" RequiredError="Campo requerido" 
+                            Validation="@(new Func<string, IEnumerable<string>>(PasswordStrength))" ></MudTextField>
+                   </MudItem>
+                   <MudItem xs="4">
+                       <MudTextField T="string" Label="Confirmación de Contraseña" Variant="Variant.Outlined" InputType="InputType.Password"  Validation="@(new Func<string, string>(PasswordMatch))" Required="true" RequiredError="Campo requerido" ></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudSpacer></MudSpacer>
+                    <MudSpacer></MudSpacer>
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="8">
+                    <MudText>Se envia email con el código de confirmación para validar su cuenta</MudText></MudItem>
+                    <MudItem xs="2"></MudItem>
+                    <MudSpacer></MudSpacer>
+                    @*Create buton *@
+                    <MudItem xs="2"></MudItem>
+                        <MudButton Disabled="@snackHandler._saving" @onclick="SavePersonInfo" Variant="Variant.Filled" Color="Color.Primary">
+                            @if (snackHandler._saving)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                <MudText Class="ms-2">Procesando</MudText>
+                            }
+                            else
+                            {
+                                <MudText>Registrar</MudText>
+                                    
+                            }
+                        </MudButton>
+                         <MudButton Disabled="true"> </MudButton>
+                        @*Clear buton *@
+                        <MudButton OnClick="CleanForm" Variant="Variant.Filled" Color="Color.Transparent">
+                                <MudText>Limpiar</MudText>
+                        </MudButton>
+                     <MudItem xs="2"></MudItem>
+                     <MudDialog @bind-IsVisible="visible" Options="dialogOptions">
+                        <TitleContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.Email" Color="@Color.Primary" Class="mr-2"/> Por favor ingrese el código de confirmación enviado a su email: 
+                            </MudText>
+                        </TitleContent>
+                        <DialogContent>
+                            <MudItem xs="12" Class="d-flex justify-center align-center">
+                                <MudTextField @bind-Value="confirmationCodeEmployer" Label="Código de confirmación" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido" ></MudTextField>
+                            </MudItem>
+                         </DialogContent>
+                        <DialogActions>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AcceptConfirmationCode" Class="px-10">Aceptar</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="ResendConfirmationCode" Class="px-10">Volver a enviar</MudButton>
+                        </DialogActions>
+                    </MudDialog>
+
+                </MudGrid>
+            </MudForm>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="3">
+    </MudItem>
+</MudGrid>
+
+@code {
+    Person personInfo = new Person("", "", "", "", Int32.Parse("0"), "", "", "",1);
+    AccountDTO accountData = new AccountDTO("","");
+    MudTextField<string> pwField1;
+    SnackHandler snackHandler = new SnackHandler();
+    MudForm form;
+    Random random = new Random();
+    public string confirmationCodeEmployer { get; set; }
+    public string confirmationCodeEmail { get; set; }
+    private bool visible;
+    private bool open;
+
+    private void OpenDialog() => visible = true;
+    void CloseDialog() => visible = false;
+    private DialogOptions dialogOptions = new() { FullWidth = true };
+
+    private string CreateConfirmationCode()
+    {
+        int confirmationCode = random.Next(100000,999999);
+        string confirmationCodeString = confirmationCode.ToString();
+        return confirmationCodeString;
+    }
+
+    async Task SavePersonInfo()
+    {
+        snackHandler._saving = true;
+        await form.Validate();
+        if (form.IsValid && ValidateInfo(personInfo))
+        {
+            accountData.Email = personInfo.Email;
+            bool emailExist = await AuthenticationService.EmailIsAlreadyRegistered(accountData.Email);
+            confirmationCodeEmail = CreateConfirmationCode();
+            if (emailExist)
+            {
+                ShowSnackNotification("El email ya se encuentra en uso", Severity.Error);
+            }
+            else
+            {
+                OpenDialog();
+                EmailService.SendConfirmationEmail("El siguiente código es el que tienes que ingresar para verificar tu email:  " +                     confirmationCodeEmail, accountData.Email);
+            }   
+        }
+        snackHandler._saving = false;
+    }
+
+    async Task AcceptConfirmationCode(){
+        OpenDialog();
+        open = true;
+        if (open && confirmationCodeEmployer!=null)
+        {
+            if( ConfirmationCodeMatch(confirmationCodeEmployer, confirmationCodeEmail))
+            {
+                ShowSnackNotification("Coincide el código de confirmación", Severity.Success);
+                await PersonService.CreatePersonAsync(personInfo);
+                await EmployerService.CreateEmployerAsync(personInfo.Email);
+                await AuthenticationService.RegisterRequestAsync(accountData);
+                await AuthorizationService.AssignRole( accountData.Email, "Employer");
+                ShowSnackNotification("Cuenta para "+personInfo.Name+" registrada", Severity.Success);
+                await AuthenticationService.SignInRequestAsync(accountData, true);
+                open = false;
+                CloseDialog();
+            }
+            else 
+            {
+                ShowSnackNotification("No coincide el código de confirmación", Severity.Error);
+            }      
+        }
+    }
+
+    async Task ResendConfirmationCode(){
+        OpenDialog();
+        open = true;
+        if (open)
+        {
+            confirmationCodeEmail = CreateConfirmationCode();
+            EmailService.SendConfirmationEmail("El siguiente código es el que tienes que ingresar para verificar tu email:  " + confirmationCodeEmail, accountData.Email);
+            ShowSnackNotification("Se ha enviado el nuevo correo", Severity.Success);
+            if (confirmationCodeEmployer!=null)
+            {
+                await AcceptConfirmationCode();
+                open = false;
+                CloseDialog();
+            } 
+        }
+        else 
+        {
+            ShowSnackNotification("No se ha enviado el nuevo correo, espere por favor", Severity.Error);
+        }   
+    }
+
+    bool ConfirmationCodeMatch(string confirmationCodeEmployer, string confirmationCodeString)
+    {
+        bool valid = true;
+        if (confirmationCodeEmployer != confirmationCodeString)
+        {
+            valid = false;
+        }
+        return valid;
+    }
+    
+    bool ValidateSsn(Person personInfo)
+    {
+        bool valid = true;
+        if (personInfo.Ssn == 0 || personInfo.Ssn < 0)
+        {
+            ShowSnackNotification("Número de cédula incorrecta", Severity.Error);
+            valid = false;
+        }
+        return valid;
+    }
+
+    bool ValidateEmail(Person personInfo)
+    {
+        bool valid = true;
+        valid = personInfo.Email.Contains('@');
+        if (!valid)
+        {
+            ShowSnackNotification("El email debe contener un @", Severity.Error);
+        }
+        return valid;
+    }
+
+    bool ValidateInfo(Person personInfo)
+    {
+        bool ssn = ValidateSsn(personInfo);
+        bool email = ValidateEmail(personInfo);
+        return ssn && email;
+    }
+
+
+    private IEnumerable<string> PasswordStrength(string pw)
+    {
+        if (string.IsNullOrWhiteSpace(pw))
+        {
+            yield return "Contraseña es requerida!";
+            yield break;
+        }
+        if (pw.Length < 8)
+        {
+            yield return "La contraseña debe tener al menos 8 caracteres";
+        }
+        if (!Regex.IsMatch(pw, @"[A-Z]"))
+        {
+            yield return "Debe contener al menos una letra mayúscula";
+        }
+        if (!Regex.IsMatch(pw, @"[a-z]"))
+        {
+            yield return "Debe contener al menos una letra minúscula";
+        }
+
+        if (!Regex.IsMatch(pw, @"[0-9]"))
+        {
+            yield return "Debe contener al menos un dígito";
+        }
+
+        if(!Regex.IsMatch(pw, @"[!-/:;<=>?@[\]^_'{|}~]"))
+        {
+            yield return "Debe contener al menos un símbolo";
+        }
+    }
+
+    private string PasswordMatch(string arg)
+    {
+        if (pwField1.Value != arg)
+            return "Contraseñas no coinciden";
+        return null;
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    void CleanForm()
+    {
+        personInfo.Name = "";
+        personInfo.Email = "";
+        personInfo.LastName1 = "";
+        personInfo.LastName2 = "";
+        personInfo.Adress = "";
+        personInfo.BankAccount = "";
+        personInfo.PhoneNumber = "";
+        personInfo.Ssn = 0;
+        accountData.Password = "";
+    }
+}

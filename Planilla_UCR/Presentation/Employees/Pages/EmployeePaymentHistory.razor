@@ -1,0 +1,325 @@
+﻿@using Application.Payments
+@using Application.ContextMenu
+@using Domain.Payments.Entities
+@using Application.Agreements
+@using Domain.Agreements.Entities
+@using Application.Subscriptions
+@using Domain.People.Entities
+@using Domain.Subscriptions.Entities
+@using Application.LegalDeductions
+@using Domain.LegalDeductions.Entities
+@using Application.Subscribes
+@using Domain.Subscribes.Entities
+@using System.Globalization
+@using Presentation.Employees.XLS
+@using Presentation.Payments.Models
+@using Application.People
+@using Application.TaxCalculator
+@using Application.PaymentCalculator;
+@using Presentation.Employees.Models
+@using Presentation.Shared.Models
+@using Presentation.Core.Components
+@using System.Text.RegularExpressions
+@using System.ComponentModel.DataAnnotations
+@using System.IO
+@inject IJSRuntime js
+@inject IPaymentService PaymentService
+@inject IContextMenuService ContextMenuService
+@inject IAgreementService AgreementService
+@inject ILegalDeductionService LegalDeductionService
+@inject IPersonService PersonService
+@inject ISubscribeService SubscribeService
+@inject NavigationManager nav
+@inject ISubscriptionService SuscriptionService
+@inject ITaxCalculatorService TaxCalculatorService
+@inject IPaymentCalculatorService PaymentCalculatorService
+@page "/{email}/Payment_History"
+
+@if(_loading) 
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+        </MudText>
+       
+    </MudPaper>
+} else 
+{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Reporte histórico de pagos", href: null, disabled: true)
+    }; 
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+    </MudPaper>
+    if (!_empty)
+    {
+        <MudGrid>
+            <MudItem xs="12" Class="d-flex justify-center align-center">
+                <MudItem xs="4">
+                     <MudText Align="Align.Center" Typo="Typo.h6" GutterBottom="true">Reporte histórico de pagos</MudText>
+                </MudItem>
+             </MudItem>
+        </MudGrid>
+        <br>
+        <MudTable @ref="@_tablePaymentHistory" Items="@_payments" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" Filter="new Func<PaymentHistoryModel,bool>(FiltersFunc)">
+            <ToolBarContent>
+                <MudItem xs="2">
+                <MudSelect Dense="true" T="string" Label="Proyecto" Variant="Variant.Outlined" TextChanged="OnProjectNameSelect">
+                    <MudSelectItem Value="@(" ")"/>
+                    @foreach (var state in _paymentsProjectNames) {
+                        <MudSelectItem T="string" Value="@state">
+                            @state
+                        </MudSelectItem>
+                    }   
+                </MudSelect>
+                </MudItem>
+                
+                <MudItem xs="2">
+                <MudSelect Dense="true" T="string" Label="Tipo contrato" Variant="Variant.Outlined"  TextChanged="OnContractTypeSelect">
+                    <MudSelectItem Value="@(" ")"/>
+                    <MudSelectItem Value="@("Medio tiempo")"/>
+                    <MudSelectItem Value="@("Servicios profesionales")"/>
+                    <MudSelectItem Value="@("Tiempo completo")"/>
+                </MudSelect>
+                </MudItem>
+                
+                <MudItem xs="2">
+                <MudSelect Dense="true" T="string" Label="Fecha" Variant="Variant.Outlined"  TextChanged="OnPaymentDateSelect">
+                     <MudSelectItem Value="@(" ")"/>
+                    @foreach (var state in _paymentsDates) {
+                        <MudSelectItem T="string" Value="@state">
+                            @state
+                        </MudSelectItem>
+                    }   
+                </MudSelect>
+                </MudItem>
+
+
+            </ToolBarContent> 
+            <HeaderContent>
+                <MudTh>Proyecto</MudTh>
+                <MudTh>Tipo contrato</MudTh>
+                <MudTh>Fecha pago</MudTh>
+                <MudTh>Salario Bruto</MudTh>
+                <MudTh>Deducciones obligatorias</MudTh>
+                <MudTh>Deducciones voluntarias</MudTh>
+                <MudTh>Salario neto</MudTh>
+            </HeaderContent>
+           
+            <RowTemplate>
+                <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                <MudTd DataLabel="Tipo contrato">@context.ContractType</MudTd>
+                <MudTd DataLabel="Fecha pago">@context.PaymentDate</MudTd>
+                <MudTd DataLabel="Salario Bruto">@context.GrossSalary</MudTd>
+                <MudTd DataLabel="Deducciones obligatorias">@context.LegalDeductions</MudTd>
+                <MudTd DataLabel="Deducciones voluntarias">@context.VoluntaryDeductions</MudTd>
+                <MudTd DataLabel="Salario neto">@context.NetSalary</MudTd>
+            </RowTemplate>
+
+            <PagerContent>
+                    <MudPagination SelectedChanged="PageChanged" Count="@((_tablePaymentHistory.GetFilteredItemsCount() + _tablePaymentHistory.RowsPerPage - 1) / _tablePaymentHistory.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+            </PagerContent>
+
+        </MudTable>
+         <br>
+        <MudButton OnClick="ClickExportXLS" Variant="Variant.Filled" Color="Color.Primary">
+                <MudText>Exportar excel</MudText>
+        </MudButton>
+
+    }else
+    {
+        <MudText Align="Align.Center" Typo="Typo.h6">
+            No existen pagos
+        </MudText>
+    }
+}
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+
+    private bool _loading = true;
+    private bool _empty = true;
+    private bool _payTaxes = false;
+
+    private MudTable<PaymentHistoryModel>  _tablePaymentHistory;
+    private IList<PaymentHistoryModel> _payments = new List<PaymentHistoryModel>();
+    private IEnumerable<PaymentHistoryModel> _paymentsHistory = new List<PaymentHistoryModel>();
+
+    private IList<Payment> _paymentsList = new List<Payment>();
+    private IList<Subscription> _deductions = new List<Subscription>();
+    private IEnumerable<LegalDeduction> _legalDeductions = new List<LegalDeduction>();
+    private IList<String> _paymentsDates = new List<String>();
+    private IList<String> _paymentsProjectNames = new List<String>();
+
+    private Agreement _agreement;
+    private double _costVoluntaryDeductions;
+    private double _costLegalDeductions;
+    private double _costNetSalary;
+
+    string projectNameFilter = "";
+    string contracTypeFilter = "";
+    string paymentDateFilter = "";
+
+    private PaymentHistoryModel[] _paymentsHistoryExcel;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _paymentsList = (IList<Payment>) await PaymentService.GetEmployeePayments(email);
+        _paymentsHistory = await GetPaymentHistory();
+        _paymentsDates = await GetPaymentDate();
+        _paymentsProjectNames = await GetProyectName();
+        _loading = false;
+    }
+
+    private async Task<IList<PaymentHistoryModel>> GetPaymentHistory()
+    {
+        foreach (Payment payment in _paymentsList){
+            await GetContractType(payment.EmployerEmail, payment.ProjectName);
+            _costLegalDeductions = await GetLegalDeductions(payment.GrossSalary);
+            _costNetSalary = await GetNetSalary(payment.GrossSalary,payment.EmployerEmail, payment.ProjectName, payment.StartDate,payment.EndDate);
+            PaymentHistoryModel _paymentHistoryModel = new PaymentHistoryModel(payment.ProjectName,  _agreement.ContractType,
+                payment.EndDate.ToShortDateString(), CostFormat(payment.GrossSalary),CostFormat(_costLegalDeductions),
+               CostFormat(_costVoluntaryDeductions), CostFormat(_costNetSalary));
+            _payments.Add(_paymentHistoryModel);
+        }
+        if (_payments.Length() > 0){
+            _empty = false;
+        }
+        return _payments;
+    }
+
+    private async Task GetContractType(string employerEmail,string projectName)
+    {
+        Agreement toSearchagreement = new Agreement(email, employerEmail, projectName, null, "", 0, null, 1, "");
+        _agreement = await AgreementService.GetContractee(toSearchagreement);
+        if (_agreement.ContractType.Equals("Servicios profesionales"))
+        {
+            _payTaxes = false;
+        }
+        else
+        {
+            _payTaxes = true;
+        }
+    }
+
+    private async Task<double> GetLegalDeductions(double grossSalary)
+    {
+        double legalDeductionsCost = 0.0;
+        if (_payTaxes){
+            _legalDeductions = await LegalDeductionService.GetAllAsync();
+            foreach (var item in _legalDeductions)
+            {
+                legalDeductionsCost += TaxCalculatorService.GetTaxAmount(item.DeductionName, grossSalary);
+            }
+        }
+        return legalDeductionsCost;
+    }
+
+    private async Task<double> GetNetSalary(double grossSalary,string employerEmail, string projectName, DateTime startDate, DateTime endDate)
+    {
+        double netSalary = grossSalary;
+        Subscribe searchSubscribe= new Subscribe(email,employerEmail, projectName, "", 0.0, startDate, endDate);
+        IList<Subscription> subscriptions = (await SubscribeService.GetSubscriptionCostsByDate(searchSubscribe)).ToList();
+        netSalary -= _costLegalDeductions;
+        IList<Subscription> _deductionsNotPaid = new List<Subscription>();
+        subscriptions = subscriptions.Where(e => e.TypeSubscription == 0).ToList();
+        _deductionsNotPaid = PaymentCalculatorService.ApplyDeductions(netSalary, subscriptions);
+        subscriptions = subscriptions.Except(_deductionsNotPaid).ToList();
+        _deductions = subscriptions;
+        double deductionsMountToPay = PaymentCalculatorService.DeductionsCost(subscriptions);
+        _costVoluntaryDeductions = deductionsMountToPay;
+        if (netSalary < deductionsMountToPay)
+        {
+            _deductions.Last().Cost = netSalary - (deductionsMountToPay - _deductions.Last().Cost);
+            netSalary = 0;
+        }
+        else
+        {
+            netSalary -= deductionsMountToPay; 
+        }
+        return netSalary;
+    }
+
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+
+    private async Task<IList<String>> GetProyectName()
+    {
+        foreach (Payment payment in _paymentsList)
+        { 
+            if (!_paymentsProjectNames.Contains(payment.ProjectName))
+            {
+                _paymentsProjectNames.Add(payment.ProjectName);
+            }
+        }
+        _paymentsProjectNames = _paymentsProjectNames.Reverse().Take(10).ToList();
+        return _paymentsProjectNames;
+    }
+
+    private async Task<IList<String>> GetPaymentDate()
+    {
+        foreach (Payment payment in _paymentsList)
+        {
+            if (!_paymentsDates.Contains(payment.EndDate.ToShortDateString()))
+            {
+                _paymentsDates.Add(payment.EndDate.ToShortDateString());
+            }
+        }
+        _paymentsDates =  _paymentsDates.Reverse().Take(10).ToList();
+        return _paymentsDates;
+    }
+
+    private void OnProjectNameSelect(string selected) {
+        projectNameFilter = selected;
+    }
+
+    private void OnContractTypeSelect(string selected) {
+        contracTypeFilter = selected;
+    }
+
+    private void OnPaymentDateSelect(string selected) {
+        paymentDateFilter = selected; 
+    }
+
+    private bool FiltersFunc(PaymentHistoryModel element) => FilterFunc(element, projectNameFilter,contracTypeFilter, paymentDateFilter);
+
+    private bool FilterFunc(PaymentHistoryModel element, string searchString1, string searchString2, string searchString3)
+    {
+        bool projectNameBool = (element.ProjectName.Equals(searchString1));
+        bool contractTypeBool = (element.ContractType.Contains(searchString2, StringComparison.OrdinalIgnoreCase));
+        bool paymentDateBool = (element.PaymentDate.Contains(searchString3, StringComparison.OrdinalIgnoreCase));
+        if((projectNameBool && contractTypeBool && paymentDateBool) || ((projectNameBool && contractTypeBool) && string.IsNullOrWhiteSpace(searchString3)))
+            return true;
+        if((projectNameBool && contractTypeBool && paymentDateBool) || ((projectNameBool && paymentDateBool) && string.IsNullOrWhiteSpace(searchString2)))
+            return true;
+        if((projectNameBool && contractTypeBool && paymentDateBool) || ((contractTypeBool && paymentDateBool) && string.IsNullOrWhiteSpace(searchString1)))
+            return true;
+        if((string.IsNullOrWhiteSpace(searchString1) && string.IsNullOrWhiteSpace(searchString2) && string.IsNullOrWhiteSpace(searchString3)))
+            return true;  
+        return false;
+    }
+
+    private async void ClickExportXLS()
+    {
+        GetExcelContent();
+        var xls = new Excel();
+        await xls.GenerateExcelReport2Async(js, _paymentsHistoryExcel, "Reporte histórico de mis pagos.xlsx");
+    }
+
+    private void GetExcelContent()
+    {
+        _paymentsHistoryExcel = _paymentsHistory.ToArray();
+    }
+
+    private void PageChanged(int i)
+    {
+       _tablePaymentHistory.NavigateTo(i - 1);
+    }
+}     

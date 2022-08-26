@@ -1,0 +1,220 @@
+﻿@page "/Projects/{employerEmail}/{projectName}/Deductions/{subscriptionName}"
+@using Application.Subscriptions
+@using Domain.Subscriptions.Entities
+@using Presentation.Core.Components
+@using Presentation.Deductions.Components
+@using System.Globalization
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+@inject ISubscriptionService SubscriptionService
+
+@{List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{employerEmail}"),
+        new BreadcrumbItem($"{projectName}", href: $"/Projects/{employerEmail}/{projectName}/"),
+        new BreadcrumbItem("Deducciones voluntarias", href: $"/Projects/{employerEmail}/{projectName}/Deductions"),
+        new BreadcrumbItem($"{subscriptionName}", href: null, disabled: true)
+    };
+}
+
+@if (_loading)
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+    </MudPaper>
+}
+else
+{
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    <MudToolBar DisableGutters="true" Class="gap-4">
+        <MudSpacer></MudSpacer>
+        @if(_disabled)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="EnableForm"/>
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="DisableForm"/>
+        }
+        
+    </MudToolBar>
+    <MudGrid>
+        <MudItem xs="12" sm="12">
+            <MudPaper  Height="250px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+                @if (_disabled)
+                {
+                    <MudText Align="Align.Center" Typo="Typo.h6">Detalles de la deducción voluntaria</MudText>
+                }
+                else
+                {
+                    <MudText Align="Align.Center" Typo="Typo.h6">Modificar deducción voluntaria</MudText>
+                }
+                <MudForm @ref="form">
+                <MudGrid>
+
+                <MudItem xs="2">
+                </MudItem>
+                <MudItem xs="8">
+                    <MudTextField @bind-Value="_newName" MaxLength="255" Label="Nombre" Variant="Variant.Outlined" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido"></MudTextField>
+                </MudItem>
+                <MudItem xs="2">
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>
+
+                <MudItem xs="4">
+                    <MudNumericField Immediate="true" Label="Costo" Format="N2" Culture="@cultureCR" Variant="Variant.Outlined" @bind-Value="_tempCost" 
+                    Adornment="Adornment.Start" AdornmentText="@cultureCR.NumberFormat.CurrencySymbol" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido" Min = "0.0"/>
+                </MudItem>
+
+                <MudItem xs="4">
+                    <MudTextField @bind-Value="_providerName"  MaxLength="255" Label="Organización" Variant="Variant.Outlined" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido"></MudTextField>
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>  
+
+                <MudItem xs="2"></MudItem>  
+
+                <MudItem xs="8">
+                    <MudTextField @bind-Value="_sDescription" MaxLength="600" Label="Descripcion" Lines="6" Variant="Variant.Outlined" ReadOnly = "@_disabled" Required="true" RequiredError="Campo requerido"></MudTextField>
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>  
+                <MudItem xs="2"></MudItem>  
+
+                @if(_disabled == false)
+                {
+                 <MudItem xs="8" >
+                    <MudButton Disabled="@snackHandler._saving" OnClick="SaveDeduction" Variant="Variant.Filled" Color="Color.Primary">
+                        @if (snackHandler._saving)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                            <MudText Class="ms-2">Modificando</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Actualizar</MudText>
+                        }
+                    </MudButton>
+                    <MudButton Disabled="true"> </MudButton>
+                    <MudButton OnClick="GoToMain" Variant="Variant.Filled" Color="Color.Transparent">
+                            <MudText>Cancelar</MudText>
+                    </MudButton>
+                </MudItem>
+                }
+                </MudGrid>
+            </MudForm>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _disabled = true;
+    private string _newName = "";
+    private double? _tempCost;
+    private string _providerName = "";
+    private string _sDescription = "";
+    public Subscription subscription = new Subscription("", "", "", "", "", 0.0, 0, 1);
+    MudForm form;
+    SnackHandler snackHandler = new SnackHandler();
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+    [Parameter] public string subscriptionName { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        subscription = await SubscriptionService.GetSubscription(employerEmail, projectName, subscriptionName);
+        if (subscription != null)
+        {
+            _newName = subscription.SubscriptionName;
+            _tempCost = subscription.Cost;
+            _providerName =subscription.ProviderName;
+            _sDescription = subscription.SubscriptionDescription;
+            _loading = false;
+        }
+    }
+
+    async Task SaveDeduction()
+    {
+        snackHandler._saving = true;
+        await form.Validate();
+        bool valid = true;
+        if (subscription.SubscriptionName != _newName) 
+        { 
+            valid = await ValidName(); 
+        }
+        if (form.IsValid && valid)
+        {
+            snackHandler._saving = false;
+            subscription.Cost = (double)_tempCost;
+            subscription.ProviderName = _providerName;
+            subscription.SubscriptionDescription = _sDescription;
+            SubscriptionService.ModifySubscription(subscription, _newName);
+            ShowSnackNotification("Deducción voluntaria " + subscription.SubscriptionName + " modificada", Severity.Success);
+            subscription.SubscriptionName = _newName;
+            subscriptionName = _newName;
+            DisableForm();
+        }
+        snackHandler._saving = false;
+    }
+
+    async Task<bool> ValidName()
+    {
+        bool valid = true;
+        Subscription tempSubscription = await SubscriptionService.GetSubscription(employerEmail, projectName, _newName);
+        if (tempSubscription != null)
+        {
+            valid = false;
+            ShowSnackNotification("El nombre del beneficio " + _newName + " ya está en uso", Severity.Error);
+            DisableForm();
+        }
+        return valid;
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    private void GoToMain()
+    {
+        nav.NavigateTo($"/Projects/{employerEmail}/{projectName}/Deductions");
+    }
+
+    private void EnableForm()
+    {
+        _disabled = false;
+        _newName = subscription.SubscriptionName;
+        _tempCost = subscription.Cost;
+        _providerName = subscription.ProviderName;
+        _sDescription = subscription.SubscriptionDescription;
+    }
+
+    private void DisableForm()
+    {
+        _disabled = true;
+        _newName = subscription.SubscriptionName;
+        _tempCost = subscription.Cost;
+        _providerName = subscription.ProviderName;
+        _sDescription = subscription.SubscriptionDescription;
+    }
+}

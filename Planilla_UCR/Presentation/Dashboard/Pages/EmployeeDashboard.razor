@@ -1,0 +1,329 @@
+﻿@using Domain.Payments.Entities
+@using Domain.Agreements.Entities
+@using Domain.Subscribes.Entities
+@using Domain.LegalDeductions.Entities
+@using Domain.Subscriptions.Entities
+@using Application.Payments
+@using Application.Agreements
+@using Application.LegalDeductions
+@using Application.TaxCalculator
+@using Application.Subscribes
+@using Application.Subscriptions
+@using Application.PaymentCalculator;
+@using Presentation.Dashboard.Components
+@using Presentation.Employees.Models
+@using Presentation.Core.Components
+@using System.Text
+@using ChartJs.Blazor.BarChart
+@using ChartJs.Blazor.PieChart
+@using ChartJs.Blazor.Util
+@using System.Globalization
+@inject IPaymentService PaymentService
+@inject IAgreementService AgreementService
+@inject ILegalDeductionService LegalDeductionService
+@inject ITaxCalculatorService TaxCalculatorService
+@inject ISubscribeService SubscribeService
+@inject ISubscriptionService SuscriptionService
+@inject IPaymentCalculatorService PaymentCalculatorService
+@inject NavigationManager nav
+@page "/Dashboard/{email}/"
+
+@if(_loading) 
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+        </MudText>
+    </MudPaper>
+} else 
+{
+    
+        <MudGrid>
+            <MudItem xs="6">
+            <MudPaper Class="pa-3" Height="380px" Elevation="3">
+
+                <MudText Align="Align.Left" Typo="Typo.h6">Salario neto    &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;<MudToggleIconButton @bind-Toggled="@barChart1" Icon="@Icons.Filled.Fullscreen" Color="@Color.Primary" ToggledIcon="@Icons.Filled.FullscreenExit" Size="Size.Small" ToggledColor="@Color.Secondary" /> </MudText>
+
+
+            @if (barChart1)
+            {
+                <Overlay IsOpen="barChart1">
+                        <MudPaper Class="d-flex flex-column align-left border-none"  Elevation="0" Outlined="false" Style="max-width: 60vw; width: 60vw; height: 43vw; overflow: auto; max-height: 95vh; ">
+                            <MudText Align="Align.Left" Typo="Typo.h6">Salario neto</MudText>
+                            <MudItem xs="10">
+                           <BarChart colorList="colorslist" title="" data="@_dataNetSalary"></BarChart>
+                            </MudItem>
+                        </MudPaper>
+                        <MudItem xs="12" md="12" Style="width: 100%;" Class="d-flex justify-start">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ToggleBarChart1" Size="Size.Medium">Cerrar</MudButton>
+                        </MudItem>
+                </Overlay>  
+            }else{ 
+                <BarChart colorList="colorslist" title="" data="@_dataNetSalary"></BarChart>
+            }
+
+            </MudPaper>
+            </MudItem>
+          
+        <MudItem xs="6">
+        <MudTable @ref="@_tablePaymentHistory" Items="@_payments" Height="255px" Hover="true" RowsPerPage="3" Breakpoint="Breakpoint.Sm" Loading="@_loading">
+                <ToolBarContent>
+                    <MudText Align="Align.Left" Typo="Typo.h6">Últimos pagos </MudText>
+                    <MudSpacer />
+            </ToolBarContent> 
+            <HeaderContent>
+                <MudTh>Proyecto</MudTh>
+                <MudTh>Fecha de pago</MudTh>
+                <MudTh>Salario neto</MudTh>
+                <MudTh><MudButton Size="Size.Small" OnClick="GoToHistoryPayments" Variant="Variant.Filled" 
+                    Color="Color.Primary"> Histórico</MudButton> </MudTh>
+            </HeaderContent>
+            <RowTemplate Context="row">
+                <MudTd DataLabel="Proyecto">@row.ProjectName</MudTd> 
+                <MudTd DataLabel="Fecha pago">@row.PaymentDate</MudTd>
+                <MudTd DataLabel="Salario neto">@row.NetSalary</MudTd>
+                     
+                <MudTd DataLabel="Ver más" >
+                    <MudButton Size="Size.Small" @onclick="@(e => GoToPaymentDetails(row.ProjectName+": "+row.PaymentDate))" Variant="Variant.Filled" Color="Color.Transparent"> Detalles</MudButton>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                    <MudPagination SelectedChanged="PageChanged" Count="@((_tablePaymentHistory.GetFilteredItemsCount() + _tablePaymentHistory.RowsPerPage - 1) / _tablePaymentHistory.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+            </PagerContent>
+        </MudTable>
+        </MudItem>
+        </MudGrid>
+        <br>
+        <MudGrid>
+            <MudItem xs="6">
+            <MudPaper Class="pa-3" Height="380px" Elevation="3">
+                   <MudText Align="Align.Left" Typo="Typo.h6">Deducciones voluntarias   &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;<MudToggleIconButton @bind-Toggled="@barChart2" Icon="@Icons.Filled.Fullscreen" Color="@Color.Primary" ToggledIcon="@Icons.Filled.FullscreenExit" Size="Size.Small" ToggledColor="@Color.Secondary" /> </MudText>
+
+
+            @if (barChart2)
+            {
+                <Overlay IsOpen="barChart2">
+                        <MudPaper Class="d-flex flex-column align-left border-none"  Elevation="0" Outlined="false" Style="max-width: 60vw; width: 60vw; height: 43vw; overflow: auto; max-height: 95vh; ">
+                            <MudText Align="Align.Left" Typo="Typo.h6">Deducciones voluntarias</MudText>
+                            <MudItem xs="10">
+                           <BarChart colorList="colorslist" title="" data="@_dataVoluntaryDeductions"></BarChart>
+                            </MudItem>
+                        </MudPaper>
+                        <MudItem xs="12" md="12" Style="width: 100%;" Class="d-flex justify-start">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ToggleBarChart2" Size="Size.Medium">Cerrar</MudButton>
+                        </MudItem>
+                </Overlay>  
+            }else{ 
+                <BarChart colorList="colorslist" title="" data="@_dataVoluntaryDeductions"></BarChart>
+            }
+            </MudPaper>
+            </MudItem>
+            
+        <MudItem xs="6">
+            <MudPaper Class="pa-3" Height="380px" Elevation="3">
+                   <MudText Align="Align.Left" Typo="Typo.h6">Deducciones legales   &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;<MudToggleIconButton @bind-Toggled="@barChart3" Icon="@Icons.Filled.Fullscreen" Color="@Color.Primary" ToggledIcon="@Icons.Filled.FullscreenExit" Size="Size.Small" ToggledColor="@Color.Secondary" /> </MudText>
+            @if (barChart3)
+            {
+                <Overlay IsOpen="barChart3">
+                        <MudPaper Class="d-flex flex-column align-left border-none"  Elevation="0" Outlined="false" Style="max-width: 60vw; width: 60vw; height: 43vw; overflow: auto; max-height: 95vh; ">
+                            <MudText Align="Align.Left" Typo="Typo.h6">Deducciones legales</MudText>
+                            <MudItem xs="10">
+                           <BarChart  colorList="colorslist" title="" data="@_dataLegalDeductions"></BarChart>
+                            </MudItem>
+                        </MudPaper>
+                        <MudItem xs="12" md="12" Style="width: 100%;" Class="d-flex justify-start">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ToggleBarChart3" Size="Size.Medium">Cerrar</MudButton>
+                        </MudItem>
+                </Overlay>  
+            }else{ 
+                <BarChart  colorList="colorslist" title="" data="@_dataLegalDeductions"></BarChart>
+            }
+            </MudPaper>
+            </MudItem>
+        </MudGrid>
+    
+}
+
+@code {
+
+    [Parameter]
+    public string email { get; set; }
+    private bool _loading = true;
+    private bool _empty = true;
+    private bool _payTaxes = false;
+    private bool barChart1 = false;
+    private bool barChart2 = false;
+    private bool barChart3 = false;
+    private MudTable<PaymentHistoryModel>  _tablePaymentHistory;
+    private IList<PaymentHistoryModel> _payments = new List<PaymentHistoryModel>();
+    private IList<Payment> _paymentsList = new List<Payment>();
+    private IList<Subscription> _deductions = new List<Subscription>();
+    private IEnumerable<PaymentHistoryModel> _paymentsHistory = new List<PaymentHistoryModel>();
+    private IEnumerable<LegalDeduction> _legalDeductions = new List<LegalDeduction>();
+    private IList<String> _paymentsProjectNames = new List<String>();
+    private IList<Double> _paymentsLegalDeductionsCost = new List<Double>();
+    private IList<Double> _paymentsNetSalaryCost = new List<Double>();
+    private IList<Double> _paymentsVoluntaryDeductionsCost = new List<Double>();
+    private Agreement _agreement;
+    private double _costVoluntaryDeductions;
+    private double _costLegalDeductions;
+    private double _costNetSalary;
+    public string[] projectNameLabels;
+    public double[] costNetSalary;
+    public double[] costVoluntaryDeductions;
+    public double[] costLegalDeductions;
+    Dictionary<string, double>? _dataNetSalary = new Dictionary<string,double>();
+    Dictionary<string, double>? _dataVoluntaryDeductions = new Dictionary<string,double>();
+    Dictionary<string, double>? _dataLegalDeductions = new Dictionary<string,double>();
+    private CultureInfo _cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    IList<string> colorslist = new List<string>()
+    {
+        {ColorUtil.ColorHexString(2, 109, 126)},
+        {ColorUtil.ColorHexString(59, 113, 151)},
+        {ColorUtil.ColorHexString(0, 147, 147)},
+        {ColorUtil.ColorHexString(68, 162, 154)},
+        {ColorUtil.ColorHexString(61, 153, 132)},
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _paymentsList = (IList<Payment>) await PaymentService.GetEmployeeLatestPayments(email);
+        _paymentsHistory = await GetLatestPayments();
+        GetBarChartData();
+        _loading = false;
+
+    }
+
+    private async Task<IList<PaymentHistoryModel>> GetLatestPayments()
+    {
+        foreach (Payment payment in _paymentsList){
+            await GetContractType(payment.EmployerEmail, payment.ProjectName);
+            _costLegalDeductions = await GetLegalDeductions(payment.GrossSalary);
+            _paymentsLegalDeductionsCost.Add(_costLegalDeductions);
+            _costNetSalary = await GetNetSalary(payment.GrossSalary,payment.EmployerEmail,
+                payment.ProjectName, payment.StartDate,payment.EndDate);
+            _paymentsNetSalaryCost.Add(_costNetSalary);
+            _paymentsVoluntaryDeductionsCost.Add(_costVoluntaryDeductions);
+            PaymentHistoryModel _paymentHistoryModel = new PaymentHistoryModel(payment.ProjectName,  _agreement.ContractType,
+                payment.EndDate.ToShortDateString(), _cultureCR.NumberFormat.CurrencySymbol+CostFormat(payment.GrossSalary),
+                _cultureCR.NumberFormat.CurrencySymbol+CostFormat(_costLegalDeductions),
+               _cultureCR.NumberFormat.CurrencySymbol+CostFormat(_costVoluntaryDeductions), 
+               _cultureCR.NumberFormat.CurrencySymbol+CostFormat(_costNetSalary));
+            _payments.Add(_paymentHistoryModel);
+        }
+        /*
+        if (_payments.Length() > 0){
+            _empty = false;
+        }
+        */
+        return _payments;
+    }
+
+    private async Task GetContractType(string employerEmail,string projectName)
+    {
+        Agreement toSearchagreement = new Agreement(email, employerEmail, projectName, null, "", 0, null, 1, "");
+        _agreement = await AgreementService.GetContractee(toSearchagreement);
+        if (_agreement.ContractType.Equals("Servicios profesionales"))
+        {
+            _payTaxes = false;
+        }
+        else
+        {
+            _payTaxes = true;
+        }
+    }
+
+    private async Task<double> GetLegalDeductions(double grossSalary)
+    {
+        double legalDeductionsCost = 0.0;
+        if (_payTaxes){
+            _legalDeductions = await LegalDeductionService.GetAllAsync();
+            foreach (var item in _legalDeductions)
+            {
+                legalDeductionsCost += TaxCalculatorService.GetTaxAmount(item.DeductionName, grossSalary);
+            }
+        }
+        return legalDeductionsCost;
+    }
+
+    private async Task<double> GetNetSalary(double grossSalary,string employerEmail, string projectName, DateTime startDate, DateTime endDate)
+    {
+        double netSalary = grossSalary;
+        Subscribe searchSubscribe= new Subscribe(email,employerEmail, projectName, "", 0.0, startDate, endDate);
+        IList<Subscription> subscriptions = (await SubscribeService.GetSubscriptionCostsByDate(searchSubscribe)).ToList();
+        netSalary -= _costLegalDeductions;
+        IList<Subscription> _deductionsNotPaid = new List<Subscription>();
+        subscriptions = subscriptions.Where(e => e.TypeSubscription == 0).ToList();
+        _deductionsNotPaid = PaymentCalculatorService.ApplyDeductions(netSalary, subscriptions);
+        subscriptions = subscriptions.Except(_deductionsNotPaid).ToList();
+        _deductions = subscriptions;
+        double deductionsMountToPay = PaymentCalculatorService.DeductionsCost(subscriptions);
+        _costVoluntaryDeductions = deductionsMountToPay;
+        if (netSalary < deductionsMountToPay)
+        {
+            _deductions.Last().Cost = netSalary - (deductionsMountToPay - _deductions.Last().Cost);
+            netSalary = 0;
+        }
+        else
+        {
+            netSalary -= deductionsMountToPay; 
+        }
+        return netSalary;
+    }
+
+    private void GetBarChartData()
+    {
+        foreach (Payment payment in _paymentsList)
+        {
+            _paymentsProjectNames.Add(payment.ProjectName+" "+payment.EndDate.ToShortDateString());
+        }
+        projectNameLabels = _paymentsProjectNames.ToArray();
+        costNetSalary =_paymentsNetSalaryCost.ToArray();
+        costVoluntaryDeductions =_paymentsVoluntaryDeductionsCost.ToArray();
+        costLegalDeductions =_paymentsLegalDeductionsCost.ToArray();
+        for (int i=0; i<projectNameLabels.Length; i++)
+        {
+            _dataNetSalary.Add(projectNameLabels[i], costNetSalary[i]);
+            _dataVoluntaryDeductions.Add(projectNameLabels[i], costVoluntaryDeductions[i]);
+            _dataLegalDeductions.Add(projectNameLabels[i], costLegalDeductions[i]);
+        }
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+
+    private void PageChanged(int i)
+    {
+        _tablePaymentHistory.NavigateTo(i - 1);
+    }
+
+    private void GoToHistoryPayments()
+    {
+        nav.NavigateTo($"/{email}/Payment_History");
+    }
+
+    private void GoToPaymentDetails(string selectedPayment)
+    {
+        selectedPayment = selectedPayment.Replace("/", "-");
+        nav.NavigateTo($"/Last_Pay/{email}/{selectedPayment}/");
+    }
+
+    private void ToggleBarChart1()
+    {
+        barChart1 = !barChart1;
+    }
+
+    private void ToggleBarChart2()
+    {
+        barChart2 = !barChart2;
+    }
+
+    private void ToggleBarChart3()
+    {
+        barChart3 = !barChart3;
+    }
+}

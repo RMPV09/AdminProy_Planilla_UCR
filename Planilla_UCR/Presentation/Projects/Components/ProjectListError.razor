@@ -1,0 +1,39 @@
+﻿@inject NavigationManager nav
+
+<MudPaper  Height="220px" Width="100%" Outlined="true" Class="pa-32" Elevation="25">  
+    <MudToolBar>
+        <MudButton OnClick="SendConmuteSignal"> Lista de proyectos</MudButton>
+        <MudButton Color="Color.Tertiary"> Proyectos desactivados </MudButton>
+        <MudSpacer></MudSpacer>
+        <MudTextField @bind-Value="_searchString" Placeholder="Buscar proyecto" Adornment="Adornment.Start" 
+            AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0">
+        </MudTextField>
+    </MudToolBar>
+    <MudPaper Width="100%" Outlined="false" Class="border-none justify-center" Elevation="0">
+        <br/>
+        <br/>
+        <br/>
+        <MudText Align="Align.Center" Typo="Typo.h5">@message</MudText>
+    </MudPaper>
+</MudPaper>
+
+@code {
+    private string _searchString = "";
+
+    [Parameter] public string projectName { get; set; }
+    [Parameter] public string employeeEmail { get; set; }
+    [Parameter] public string message { get; set; }
+    [Parameter] public EventCallback<string> SendTableState { get; set; }
+
+    string _searchString1 = "";
+
+    private async Task SendConmuteSignal()
+    {
+        await SendTableState.InvokeAsync("");
+    }
+    private void GoToCreate()
+    {
+        nav.NavigateTo($"/Create_Project/{employeeEmail}");
+    }
+
+}

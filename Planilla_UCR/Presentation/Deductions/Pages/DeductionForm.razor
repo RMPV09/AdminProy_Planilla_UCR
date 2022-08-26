@@ -1,0 +1,207 @@
+﻿@page "/Projects/{employerEmail}/{projectName}/Deductions/New"
+@using Domain.Subscriptions.Entities
+@using Application.Subscriptions
+@using Presentation.Deductions.Components
+@using Presentation.Core.Components
+@using System.Globalization
+@inject ISubscriptionService SubscriptionService
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+
+@{List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{employerEmail}"),
+        new BreadcrumbItem($"{projectName}", href: $"/Projects/{employerEmail}/{projectName}"),
+        new BreadcrumbItem("Deducciones voluntarias", href: $"/Projects/{employerEmail}/{projectName}/Deductions"),
+        new BreadcrumbItem("Nueva deducción", href: null, disabled: true)
+    };
+}
+<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+<MudGrid>
+    <MudItem xs="12" sm="12">
+        <MudPaper  Height="250px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+            <MudText Align="Align.Center" Typo="Typo.h6">Añadir deducción voluntaria</MudText>
+            <MudForm @ref="form">
+            <MudGrid>
+            <MudItem xs="2">
+            </MudItem>
+            <MudItem xs="8">
+                <MudTextField @bind-Value="subscriptionInfo.SubscriptionName" MaxLength="255" Label="Nombre" Variant="Variant.Outlined"  Required="true" RequiredError="Campo requerido"></MudTextField>
+            </MudItem>
+            <MudItem xs="2">
+            </MudItem>
+
+            <MudItem xs="2">
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField Immediate="true" Label="Costo" Format="N2" Culture="@cultureCR" Variant="Variant.Outlined" @bind-Value="_cost" 
+                    Adornment="Adornment.Start" AdornmentText="@cultureCR.NumberFormat.CurrencySymbol" Required="true" RequiredError="Campo requerido" Min = "0.0" />
+            </MudItem>
+
+            <MudItem xs="4">
+                <MudTextField @bind-Value="subscriptionInfo.ProviderName" MaxLength="255" Label="Organización" Variant="Variant.Outlined"  Required="true" RequiredError="Campo requerido"></MudTextField>
+            </MudItem>
+
+            <MudItem xs="2">
+            </MudItem>
+            <MudItem xs="2">
+            </MudItem>
+            <MudItem xs="8">
+                <MudTextField @bind-Value="subscriptionInfo.SubscriptionDescription" MaxLength="600" Label="Descripción" Variant="Variant.Outlined"  Required="true" RequiredError="Campo requerido"></MudTextField>
+            </MudItem>
+
+            <MudItem xs="2">
+            </MudItem>
+            <MudItem xs="2">
+            </MudItem>
+            <MudItem xs="8" >
+                <MudButton Disabled="@snackHandler._saving" OnClick="SaveDeduction" Variant="Variant.Filled" Color="Color.Primary">
+                    @if (snackHandler._saving)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Procesando</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Crear</MudText>
+                    }
+                </MudButton>
+                <MudButton Disabled="true"> </MudButton>
+                <MudButton OnClick="CleanForm" Variant="Variant.Filled" Color="Color.Transparent">
+                        <MudText>Limpiar</MudText>
+                </MudButton>
+            </MudItem>
+            <MudItem xs="2"></MudItem>
+            </MudGrid>
+        </MudForm>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudDialog @bind-IsVisible="_visible" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            Reactivar Beneficio</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Ya existe un beneficio inhabilitado con el nombre ingresado, ¿desea reactivarlo?</MudText>
+    </DialogContent>
+    <DialogActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ReactivateSubscription" Class="px-10">Aceptar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CloseDialog" Class="px-10">Cancelar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code{
+    private double? _cost;
+    SnackHandler snackHandler = new SnackHandler();
+    Subscription subscriptionInfo = new Subscription("", "", "", "", "", 0.0, 0, 1);
+    MudForm form;
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+
+    private bool _visible;
+    private bool _open;
+    void CloseDialog() => _visible = false;
+    private void OpenDialog() => _visible = true;
+    private DialogOptions dialogOptions = new() { FullWidth = true };
+
+    async Task SaveDeduction()
+    {
+        subscriptionInfo.EmployerEmail = employerEmail;
+        subscriptionInfo.ProjectName = projectName;
+        subscriptionInfo.Cost = Convert.ToDouble(_cost);
+        Subscription subscriptionToAdd = subscriptionInfo;
+        snackHandler._saving = true;
+        await form.Validate();
+        if (form.IsValid)
+        {
+            int error = await ValidName();
+            if (error == 0)
+            {
+                SubscriptionService.CreateSubscriptionAsync(subscriptionToAdd);
+                snackHandler._saving = false;
+                ShowSnackNotification("Deducción " + subscriptionToAdd.SubscriptionName + " creada", Severity.Success);
+            }
+            else
+            {
+                if (error == 1)
+                {
+                    OpenDialog();
+                }
+                else
+                {
+                    snackHandler._saving = false;
+                    ShowSnackNotification("Ya existe una deducción con el nombre " + subscriptionToAdd.SubscriptionName, Severity.Error);
+                }
+            }
+        }
+        snackHandler._saving = false;
+    }
+
+    private void ReactivateSubscription()
+    {
+        Subscription subscriptionToAdd = subscriptionInfo;
+        SubscriptionService.DisabledSubscription(subscriptionToAdd);
+        SubscriptionService.CreateSubscriptionAsync(subscriptionToAdd);
+        ShowSnackNotification("Beneficio " + subscriptionToAdd.SubscriptionName + " reactivado", Severity.Success);
+        CloseDialog();
+        GoToMain();
+    }
+
+    private async Task<int> ValidName()
+    {
+        Subscription subscription = await SubscriptionService.GetSubscription(employerEmail, projectName, subscriptionInfo.SubscriptionName);
+        if (subscription == null)
+        {
+            return 0;
+        }
+        else
+        {
+            if (subscription.IsEnabled == 0)
+            {
+                return 1;
+            }
+            else
+            {
+                return 2;
+            }
+        }
+
+    }
+
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    private void GoToMain()
+    {
+        nav.NavigateTo($"/Projects/{employerEmail}/{projectName}/Deductions", true);
+    }
+
+    private void CleanForm()
+    {
+        subscriptionInfo.SubscriptionName = "";
+        subscriptionInfo.ProviderName = "";
+        _cost = null;
+        subscriptionInfo.SubscriptionDescription = "";
+    }
+}

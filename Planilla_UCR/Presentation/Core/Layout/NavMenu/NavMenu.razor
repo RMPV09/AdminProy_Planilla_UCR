@@ -1,0 +1,33 @@
+﻿
+<AuthorizeView Roles="Employer">
+    <Authorized>
+    <div class="NavMenuCssClass">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                 <EmployerNavMenu email="@email"></EmployerNavMenu>  
+            </li>
+        </ul>
+    </div>
+    </Authorized>
+    <NotAuthorized>
+    </NotAuthorized>
+</AuthorizeView>
+
+<AuthorizeView Roles="Employee">
+    <Authorized>
+    <div class="NavMenuCssClass">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                 <EmployeeNavMenu email="@email"></EmployeeNavMenu>  
+            </li>
+        </ul>
+    </div>
+    </Authorized>
+    <NotAuthorized>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+}

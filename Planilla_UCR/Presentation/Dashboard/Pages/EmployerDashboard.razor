@@ -1,0 +1,389 @@
+﻿@using System.Text
+@using Application.Payments.Models
+@using ChartJs.Blazor.BarChart
+@using ChartJs.Blazor.PieChart
+@using ChartJs.Blazor.Util
+@using Domain.Payments.Entities
+@using Domain.Projects.Entities
+@using Domain.ReportOfHours.Entities
+@using Domain.Subscribes.Entities
+@using Domain.Subscriptions.Entities
+@using Presentation.Core.Components
+@using Presentation.Dashboard.Components
+@using System.Globalization
+@using Application.Payments
+@using Application.Agreements 
+@using Domain.Agreements.Entities 
+@using Application.Projects
+@using Presentation.Payments.Models
+@using Application.ReportOfHours
+@using Application.PaymentCalculator;
+@using Application.Subscribes
+@using Application.TaxCalculator
+
+@inject NavigationManager NavigationManager
+@inject IPaymentService PaymentService
+@inject IAgreementService AgreementService
+@inject IProjectService ProjectService
+@inject IReportOfHoursService ReportHoursService
+@inject IPaymentCalculatorService PaymentCalculatorServices
+@inject ISubscribeService SubscribeService
+@inject ITaxCalculatorService TaxCalculatorService
+
+@page "/DashboardEmployer/{email}"
+
+@if (_loading)
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+    </MudPaper>
+}
+else
+{
+<MudGrid>
+    <MudItem xs="6">
+        <MudPaper Class="pa-3" Height="380px" Elevation="3">
+            <MudText Align="Align.Left" Typo="Typo.h6">Cantidad de empleados por proyecto  &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;<MudToggleIconButton @bind-Toggled="@barChart" Icon="@Icons.Filled.Fullscreen" Color="@Color.Primary" ToggledIcon="@Icons.Filled.FullscreenExit" Size="Size.Small" ToggledColor="@Color.Secondary" /> </MudText>
+
+            <MudText Align="Align.Left" Typo="Typo.body1">
+               <MudIcon  Style="@($"color: #026d7e")" Icon= "@Icons.Filled.Circle"/> Servicios Profesionales  
+               <MudIcon  Style="@($"color: #3b7197")" Icon= "@Icons.Filled.Circle"/> Medio tiempo
+               <MudIcon  Style="@($"color: #009393")" Icon= "@Icons.Filled.Circle"/> Tiempo completo  
+           </MudText> 
+            @if (barChart)
+            {
+                <Overlay IsOpen="barChart">
+                        <MudPaper Class="d-flex flex-column align-left border-none"  Elevation="0" Outlined="false" Style="max-width: 60vw; width: 60vw; height: 43vw; overflow: auto; max-height: 95vh; ">
+                            <MudText Align="Align.Left" Typo="Typo.h6">Cantidad de empleados por proyecto</MudText>
+
+                            <MudText Align="Align.Left" Typo="Typo.body1">
+                               <MudIcon  Style="@($"color: #026d7e")" Icon= "@Icons.Filled.Circle"/> Servicios Profesionales  
+                               <MudIcon  Style="@($"color: #3b7197")" Icon= "@Icons.Filled.Circle"/> Medio tiempo
+                               <MudIcon  Style="@($"color: #009393")" Icon= "@Icons.Filled.Circle"/> Tiempo completo  
+                           </MudText> 
+                            <MudItem xs="10">
+                            <MultiBarChart colorList="colorslist" title="" data="@profesionalData" data2="@midTimeData" data3="@fullTimeData"></MultiBarChart>
+                            </MudItem>
+                        </MudPaper>
+                        <MudItem xs="12" md="12" Style="width: 100%;" Class="d-flex justify-start">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ToggleBarChart" Size="Size.Medium">Cerrar</MudButton>
+                        </MudItem>
+                </Overlay>  
+            }else{ 
+                 <MultiBarChart colorList="colorslist" title="" data="@profesionalData" data2="@midTimeData" data3="@fullTimeData"></MultiBarChart>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper  Class="border-none" Elevation="0">
+            <MudTable Height="250px" Class="border-none" @ref="@_tableLegalDeductions" RowsPerPage="3"  Items="@_projectsList" Breakpoint="Breakpoint.Sm" Elevation="3">
+                <ToolBarContent>
+                        <MudText Align="Align.Left" Typo="Typo.h6">Pagos pendientes </MudText>
+                        <MudSpacer />
+                </ToolBarContent> 
+                <HeaderContent>
+                    <MudTh>Proyecto</MudTh>
+                    <MudTh>Fecha</MudTh>
+                    <MudTh>Acciones</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                        <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                        <MudTd DataLabel="Fecha">@context.LastPaymentDate.ToShortDateString() </MudTd>
+                        <MudTd DataLabel="Acciones">
+                            <MudButton Size="Size.Small" @onclick="@(e => GoToPay(context.ProjectName))" Variant="Variant.Filled" Color="Color.Primary"> Pagar</MudButton>    
+                        </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                        <MudPagination SelectedChanged="PageChanged" Count="@((_tableLegalDeductions.GetFilteredItemsCount() + _tableLegalDeductions.RowsPerPage - 1) / _tableLegalDeductions.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper  Class="border-none" Elevation="0">
+            <MudTable Height="250px" @ref="@_tableEmployerPayments" RowsPerPage="3" Items="@_tablelastEmployerPayments" Breakpoint="Breakpoint.Sm" Elevation="3">
+                <ToolBarContent>
+                        <MudText Align="Align.Left" Typo="Typo.h6">Últimos pagos </MudText>
+                        <MudSpacer />
+                </ToolBarContent> 
+                <HeaderContent>
+                    <MudTh>Proyecto</MudTh>
+                    <MudTh>Fecha</MudTh>
+                    <MudTh>Monto</MudTh>
+
+                </HeaderContent>
+
+                <RowTemplate>
+                        <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                        <MudTd DataLabel="Fecha">@context.EndDate.ToShortDateString()</MudTd>
+                        <MudTd DataLabel="Monto"> @_cultureCR.NumberFormat.CurrencySymbol @CostFormat(@context.GrossSalary) </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                        <MudPagination SelectedChanged="PageChangedLastPays" Count="@((_tableEmployerPayments.GetFilteredItemsCount() + _tableEmployerPayments.RowsPerPage - 1) / _tableEmployerPayments.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+                </PagerContent>
+            </MudTable>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+    <MudPaper Height="380px" Class="pa-3" Elevation="3">
+        <MudText Align="Align.Left" Typo="Typo.h6">Costo total por proyecto &emsp;&emsp;&emsp; &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;<MudToggleIconButton @bind-Toggled="@_isOpen" Icon="@Icons.Filled.Fullscreen" Color="@Color.Primary" ToggledIcon="@Icons.Filled.FullscreenExit" Size="Size.Small" ToggledColor="@Color.Secondary" /> </MudText>
+        <MudText Align="Align.Left" Typo="Typo.body1">
+               Total invertido en proyectos: @_cultureCR.NumberFormat.CurrencySymbol @CostFormat(@totalCost)
+        </MudText> 
+        @if (_isOpen)
+        {
+            <Overlay IsOpen="_isOpen">
+                    <MudPaper Class="d-flex flex-column align-left border-none"  Elevation="0" Outlined="false" Style="max-width: 60vw; width: 60vw; height: 43vw; overflow: auto; max-height: 95vh; ">
+                        <MudText Align="Align.Left" Typo="Typo.h6"> &nbsp;&nbsp;&nbsp; Costo total por proyecto</MudText>
+                        <MudText Align="Align.Left" Typo="Typo.body1">
+                             &emsp; Total invertido en proyectos: @_cultureCR.NumberFormat.CurrencySymbol @CostFormat(@totalCost)
+                              <MudTreeView T="string">
+                                    <MudTreeViewItem Value="@("Total invertido por proyecto")">
+                                        @foreach (var item in _data)
+                                        { 
+                                            <MudTreeViewItem Value="@(item.Key+": "+@_cultureCR.NumberFormat.CurrencySymbol+ CostFormat(item.Value))" />
+                                        }
+                                    </MudTreeViewItem>
+                              </MudTreeView>
+                              </MudText>
+                            
+                         <MudItem xs="10">
+                        <PieChart colorList="colorslist" title="" data="@_data"></PieChart>
+                        </MudItem>
+                    </MudPaper>
+                    <MudItem xs="12" md="12" Style="width: 100%;" Class="d-flex justify-start">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="TogglePieChart" Size="Size.Medium">Cerrar</MudButton>
+                    </MudItem>
+            </Overlay>  
+        }else{ 
+            <PieChart colorList="colorslist" title="" data="@_data"></PieChart>
+        }
+    </MudPaper>
+    </MudItem>
+    
+</MudGrid>   
+}
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+    private bool _isLoading = true;
+    private bool _isOpen = false;
+    private bool barChart = false;
+    private MudTable<ProjectModel> _tableLegalDeductions;
+    private MudTable<Payment> _tableEmployerPayments;
+    Dictionary<string, double> _data = new Dictionary<string, double>();
+    Dictionary<string, double> profesionalData = new Dictionary<string, double>();
+    private string _summary { get; set; }
+
+    Dictionary<string, double> midTimeData = new Dictionary<string, double>();
+    Dictionary<string, double> fullTimeData = new Dictionary<string, double>();
+    private bool _loading = true;
+    private IList<String> _paymentsProjectNames = new List<String>();
+
+    private IList<Project> _projects = new List<Project>();
+    private DateTime _nextPay = DateTime.Now;
+    private double totalCost { get; set; }
+
+    IList<string> colorslist = new List<string>()
+    {
+        {ColorUtil.ColorHexString(2, 109, 126)},
+        {ColorUtil.ColorHexString(59, 113, 151)},
+        {ColorUtil.ColorHexString(0, 147, 147)},
+        {ColorUtil.ColorHexString(68, 162, 154)},
+        {ColorUtil.ColorHexString(61, 153, 132)},
+    };
+
+    private CultureInfo _cultureCR = CultureInfo.GetCultureInfo("es-CR");
+    private IList<Payment> _lastEmployerPayments = new List<Payment>();
+    private IList<ProjectModel> _projectsList = new List<ProjectModel>();
+    private IList<Payment> _tablelastEmployerPayments = new List<Payment>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+
+        _lastEmployerPayments = (IList<Payment>) await PaymentService.GetEmployerPayments(email);
+        var employerProjects = 
+                        from payment in _lastEmployerPayments
+                        group payment by payment.ProjectName;
+
+        await LoadPieChart(employerProjects);
+        await LoadPaymentTable();
+        await GetEmployerCost();
+        _tablelastEmployerPayments = _tablelastEmployerPayments.OrderByDescending(pay => pay.EndDate).ToList();
+        GetTotalPaymentsAmount();
+        _loading = false;
+    }
+
+    private void PageChanged(int i)
+    {
+        _tableLegalDeductions.NavigateTo(i - 1);
+    }
+
+    private void PageChangedLastPays(int i)
+    {
+        _tableEmployerPayments.NavigateTo(i - 1);
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+
+    private async Task GetProjectsMountToPay()
+    {
+        IList<ProjectModel> projectsToDelete = new List<ProjectModel>();
+        foreach (ProjectModel _pModel in _projectsList)
+        {
+            IList<Agreement> _employees = await AgreementService.GetProjectAgreements(_pModel.ProjectName, _pModel.EmployerEmail);
+
+            Payment _payment = new Payment("", _pModel.EmployerEmail, _pModel.ProjectName, 0,
+                _pModel.LastPaymentDate, _pModel.LastPaymentDate.AddDays(_pModel.DayInterval));
+            IList<Payment> _paidEmployees = await PaymentService.GetProjectPayments(_payment);
+
+            foreach (Agreement _employeeAgreement in _employees)
+            {
+                if (_paidEmployees.Where(e => e.EmployeeEmail == _employeeAgreement.EmployeeEmail).Length() == 0)
+                {
+                    double _mountToPay = 0;
+                    Subscribe searchSubscribe = new Subscribe(_employeeAgreement.EmployeeEmail, _employeeAgreement.EmployerEmail, _employeeAgreement.ProjectName, "", 0.0, _pModel.LastPaymentDate, _pModel.LastPaymentDate.AddDays(_pModel.DayInterval));
+                    IEnumerable<Subscription> subscriptions = await SubscribeService.GetSubscribes(searchSubscribe);
+
+                    HoursReport _report = new HoursReport();
+                    _report.EmployeeEmail = _employeeAgreement.EmployeeEmail;
+                    _report.ReportDate = _pModel.LastPaymentDate;
+                    IList<HoursReport> reports = await ReportHoursService.GetEmployeeReports(_report, _pModel.LastPaymentDate.AddDays(_pModel.DayInterval));
+
+                    _mountToPay = PaymentService.GetSalary(_employeeAgreement, _pModel.DayInterval, subscriptions, reports);
+                    _pModel.MountToPay += _mountToPay;
+                    EmployeeAgreement projectEmployee = new EmployeeAgreement();
+                    projectEmployee.EmployeeEmail = _employeeAgreement.EmployeeEmail;
+                    projectEmployee.MountToPay = _mountToPay;
+                    _pModel.EmployeeList.Add(projectEmployee);
+                }
+            }
+            if (_pModel.MountToPay == 0)
+            {
+                projectsToDelete.Add(_pModel);
+            }
+        }
+        foreach (ProjectModel toDelete in projectsToDelete)
+        {
+            _projectsList.Remove(toDelete);
+        }
+    }
+
+    private async Task GetEmployerCost()
+    {
+        foreach (Payment payment in _lastEmployerPayments)
+        {
+            double cost = payment.GrossSalary;
+            cost += GetEmployerSocialCharges(payment);
+            cost += Convert.ToDouble(await GetEmployeeBenefits(payment));
+            _tablelastEmployerPayments.Add(new Payment(payment.EmployeeEmail, payment.EmployerEmail, payment.ProjectName, cost, payment.StartDate, payment.EndDate));
+        }
+    }
+
+    private double GetEmployerSocialCharges(Payment projectHistorical)
+    {
+        return TaxCalculatorService.GetEmployerSocialCharges(projectHistorical.GrossSalary);
+    }
+
+    private async Task<double> GetEmployeeBenefits(Payment payment)
+    {
+        double benefitsCost = 0;
+        Subscribe searchSubscribe= new Subscribe(payment.EmployeeEmail,
+            payment.EmployerEmail, payment.ProjectName, "",
+            0.0, payment.StartDate,  payment.EndDate);
+        IList<Subscription> benefits = (await SubscribeService.GetSubscriptionCostsByDate(searchSubscribe)).ToList();
+        benefits = benefits.Where(e => e.TypeSubscription == 1).ToList();
+        foreach (Subscription benefit in benefits)
+        {
+            benefitsCost += benefit.Cost;
+        }
+        return benefitsCost;
+    }
+
+    private void GetProjectEmployeesCount(IList<Agreement> agreements)
+    {
+        var employerProjects = 
+                    from project in agreements
+                    group project by project.ProjectName;
+
+        foreach(var project in employerProjects)
+        {
+            string projectName = project.FirstOrDefault().ProjectName;
+            IList<Agreement> profesionalCount = agreements.Where(e => e.ContractType.Equals("Servicios profesionales") && e.ProjectName.Equals(projectName)).ToList();
+            IList<Agreement> midTimeCount = agreements.Where(e => e.ContractType.Equals("Medio tiempo") && e.ProjectName.Equals(projectName)).ToList();
+            IList<Agreement> fullTimeCount = agreements.Where(e => e.ContractType.Equals("Tiempo completo") && e.ProjectName.Equals(projectName)).ToList();
+
+            profesionalData.Add(projectName, profesionalCount.Length());
+            midTimeData.Add(projectName, midTimeCount.Length());
+            fullTimeData.Add(projectName, fullTimeCount.Length());
+        }
+    }
+
+    private async Task LoadPieChart(IEnumerable<IGrouping<string, Payment>>  employerProjects)
+    {
+        totalCost = 0;
+        foreach (var group in employerProjects){
+            double cost = 0;
+            foreach (var payment in group){
+                cost += payment.GrossSalary;
+                cost += GetEmployerSocialCharges(payment);
+                cost += Convert.ToDouble(await GetEmployeeBenefits(payment));
+            }
+            totalCost += cost;
+            _data.Add(group.FirstOrDefault().ProjectName, cost);
+        }
+
+    }
+
+    private async Task LoadPaymentTable()
+    {
+        IList<Agreement> agreements = (IList<Agreement>) await AgreementService.GetEmployerAgreements(email);
+
+        _projects = (IList<Project>) await ProjectService.GetEmployerProyects(email);
+        _projectsList = PaymentService.GetProjectsToPay(_projects);
+        await GetProjectsMountToPay();
+        GetProjectEmployeesCount(agreements);
+    }
+
+    private void GetTotalPaymentsAmount()
+    {
+        var employerTotalPaymentsAmount = _tablelastEmployerPayments.GroupBy(x => new { x.ProjectName, x.EndDate }).ToList();
+
+        IList<Payment> result = new List<Payment>();
+        foreach(var paymentGroup in employerTotalPaymentsAmount){
+            double totalPayCost = 0;
+            Payment tempPayment = null;
+            foreach (var payment in paymentGroup)
+            {
+                totalPayCost += payment.GrossSalary;
+                tempPayment = payment;
+            }
+            tempPayment.GrossSalary = totalPayCost;
+            result.Add(tempPayment);
+        }
+        _tablelastEmployerPayments = result.Take(10).ToList();
+    }
+
+    private void GoToPay(string selectedPay)
+    {
+        NavigationManager.NavigateTo($"/Approve_Payment/{email}/{selectedPay}/");
+    }
+
+    private void TogglePieChart()
+    {
+        _isOpen = !_isOpen;
+    }
+
+    private void ToggleBarChart()
+    {
+        barChart = !barChart;
+    }
+}

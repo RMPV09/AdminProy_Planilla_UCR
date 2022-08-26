@@ -1,0 +1,69 @@
+﻿@using Domain.Authentication.DTOs
+@using Application.Authentication
+@using  Domain.Authentication
+@using Application.Authorization;
+@using Application.Authorization.Implementations;
+@using Application.ContextMenu
+
+@inject IAuthenticationService AuthenticationService
+@inject IContextMenuService ContextMenuService
+@inject IAuthorizationServices AuthorizationService
+@inject NavigationManager nav
+
+@page "/"
+
+<AuthorizeView>
+    <Authorized> 
+        <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+            <MudText Align="Align.Center" Typo="Typo.h6">
+                <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+            </MudText>
+        </MudPaper>
+        @{
+            email = context.User.Identity.Name;
+            authorized = true;
+        }
+    </Authorized>
+    <NotAuthorized>
+    </NotAuthorized>
+</AuthorizeView>
+
+<AuthorizeView Roles="Employee">
+    <Authorized> 
+        @{
+            authorizedEmployee = true;
+        }
+    </Authorized>
+    <NotAuthorized>
+    </NotAuthorized>
+</AuthorizeView>
+
+
+@code{
+    public string email { get; set; }
+    public bool authorized { get; set; } = false;
+    public bool authorizedEmployee { get; set; } = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (authorized)
+            {
+                if (authorizedEmployee)
+                {
+                    ContextMenuService.SetProjectsContext(false, false, "", "", false, false);
+                    nav.NavigateTo($"/Dashboard/{email}/");
+                }
+                else
+                {
+                    ContextMenuService.SetProjectsContext(false, false, "", "", false, false);
+                    nav.NavigateTo($"DashboardEmployer/{email}/");
+                }
+            }
+            else{
+                nav.NavigateTo($"/Loggin");
+            }
+        }
+    }
+}

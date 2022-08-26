@@ -1,0 +1,219 @@
+﻿@page "/Create_Employee/{email}/{projectName}"
+@using Application.People
+@using Domain.Authentication.DTOs
+@using Domain.People.Entities
+@using Domain.Employees.Entities
+@using Application.Employees
+@using Presentation.Shared.Models
+@using Presentation.Core.Components
+@using System.ComponentModel.DataAnnotations
+@using Application.Authorization;
+@using Application.Authorization.Implementations;
+@using Application.Authentication;
+@using Application.Email;
+
+@inject ISnackbar Snackbar
+@inject IPersonService PersonService
+@inject IEmployeeService EmployeeService
+@inject IAuthorizationServices AuthorizationService
+@inject IAuthenticationService authService;
+@inject IEmailServices EmailService
+@inject NavigationManager nav
+
+@*Navigation footprint *@
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{email}"),
+        new BreadcrumbItem(@projectName, href:  $"/Projects/{email}/{projectName}"),
+        new BreadcrumbItem("Empleados", href: $"/View_Project_Employees/{email}/{projectName}"),
+        new BreadcrumbItem("Nuevo empleado",  href: null, disabled: true)
+    };
+}
+<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+
+<MudGrid>
+    <MudItem xs="10" sm="12">
+        <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+            <MudSpacer></MudSpacer>
+            <MudText Align="Align.Center" Typo="Typo.h6">Información del empleado</MudText>
+            <MudForm @ref="form">
+                    <MudGrid>
+                    @*Small fields *@
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.Name" Label="Nombre" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"></MudTextField>
+                    </MudItem>
+
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.Email" Label="Email" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"  Validation="@(new EmailAddressAttribute() {ErrorMessage = "Por favor, digite un correo válido"})"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.LastName1" Label="Primer Apellido" Variant="Variant.Outlined"></MudTextField>
+                    </MudItem>
+
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.LastName2" Label="Segundo Apellido" Variant="Variant.Outlined"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+
+                    <MudItem xs="2"></MudItem>
+                     <MudItem xs="4">
+                        <MudTextField @bind-Value="personInfo.PhoneNumber" Label="Teléfono" Variant="Variant.Outlined" ></MudTextField>
+                    </MudItem>
+
+                    <MudItem xs="4">
+                        <MudNumericField @bind-Value="personInfo.Ssn" Label="Cedula" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido" HideSpinButtons="true" Min = "0"> </MudNumericField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+
+                    @*Large fields *@
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="8">
+                        <MudTextField @bind-Value="personInfo.Adress" Label="Dirección" Variant="Variant.Outlined"></MudTextField>
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="8">
+                        <MudTextField @bind-Value="personInfo.BankAccount" Label="Cuenta Bancaria" Variant="Variant.Outlined" Required="true" RequiredError="Campo requerido"></MudTextField>
+                    
+                        <br />
+                        <MudDivider />
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+
+                    @*Create buton *@
+                    <MudItem xs="2"></MudItem>
+                    <MudItem xs="8" >
+                    
+                        <MudButton Disabled="@snackHandler._saving" OnClick="SavePersonInfo" Variant="Variant.Filled" Color="Color.Primary">
+                            @if (snackHandler._saving)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                <MudText Class="ms-2">Procesando</MudText>
+                            }
+                            else
+                            {
+                                <MudText>Registrar</MudText>
+                            }
+                        </MudButton>
+                        <MudButton Disabled="true"> </MudButton>
+
+                        @*Clear buton *@
+                        <MudButton OnClick="CleanForm" Variant="Variant.Filled" Color="Color.Transparent">
+                                <MudText>Limpiar</MudText>
+                        </MudButton>
+                        
+                    </MudItem>
+                    <MudItem xs="2"></MudItem>
+                    
+                </MudGrid>
+            </MudForm>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    Person personInfo = new Person("", "", "", "", Int32.Parse("0"), "", "", "",1);
+    SnackHandler snackHandler = new SnackHandler();
+    MudForm form;
+
+    [Parameter]
+    public string email { set; get; }
+    [Parameter]
+    public string projectName { set; get; }
+
+    async Task SavePersonInfo()
+    {
+        snackHandler._saving = true;
+        await form.Validate();
+        bool validPerson = await validatePersonInfo(personInfo);
+        if (form.IsValid && validPerson)
+        {
+            await PersonService.CreatePersonAsync(personInfo);
+            await EmployeeService.CreateEmployeeAsync(personInfo.Email);
+            AccountDTO accountData = new AccountDTO(personInfo.Email,personInfo.Name+"_"+personInfo.Ssn+"!A");
+            string message = "Sus credenciales son: Usuario = "+accountData.Email+ " Clave =  "+accountData.Password;
+            await authService.RegisterRequestAsync(accountData);
+            await AuthorizationService.AssignRole(accountData.Email, "Employee");
+            snackHandler._saving = false;
+            EmailService.SendConfirmationEmail(message, accountData.Email);
+            ShowSnackNotification("Cuenta para empleado "+personInfo.Name+" creada", Severity.Success);
+            ShowSnackNotification("Se utilizó la contraseña por defecto: Nombre_Cedula!A", Severity.Info);
+        }
+        snackHandler._saving = false;
+    }
+
+    async Task<bool> validatePersonInfo(Person personInfo)
+    {
+        bool Ssn = ValidateSsn(personInfo);
+        bool Email = await ValidateEmail(personInfo);
+        return Ssn && Email;
+    }
+
+    async Task<bool> ValidateEmail(Person personInfo)
+    {
+        bool valid = true;
+        IEnumerable<Person> personList = await PersonService.GetPersonByEmail(personInfo.Email);
+        IEnumerable<Employee> employeeList = await EmployeeService.GetEmployeeByEmail(personInfo.Email);
+
+        if (personList.Length() == 0 && employeeList.Length() == 0)
+        {
+            valid=true;
+        }
+        else {
+            valid=false;
+            ShowSnackNotification("El email " + personInfo.Email + " se encuentra en uso", Severity.Error);
+        }   
+        return valid;
+    }
+
+    bool ValidateSsn(Person personInfo)
+    {
+        bool valid = true; 
+        if (personInfo.Ssn == 0 || personInfo.Ssn < 0)
+        {
+            ShowSnackNotification("Número de cédula incorrecta", Severity.Error);
+            valid = false;
+        }
+        return valid;
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 2;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    void CleanForm()
+    {
+        personInfo.Name = "";
+        personInfo.Email = "";
+        personInfo.LastName1 = "";
+        personInfo.LastName2 = "";
+        personInfo.Adress = "";
+        personInfo.BankAccount = "";
+        personInfo.PhoneNumber = "";
+        personInfo.Ssn = 0;
+    }
+
+     private void GoToProjectEmployees()
+    {
+        nav.NavigateTo($"View_Project_Employees/{email}/{projectName}");
+    }
+}

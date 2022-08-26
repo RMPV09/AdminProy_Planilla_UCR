@@ -1,0 +1,48 @@
+﻿@using Domain.Authentication.DTOs
+@using Application.Authentication
+@using  Domain.Authentication
+@using Application.Authorization;
+@using Application.Authorization.Implementations;
+@using Application.ContextMenu
+
+@inject IAuthenticationService AuthenticationService
+@inject IContextMenuService ContextMenuService
+@inject IAuthorizationServices AuthorizationService
+@inject NavigationManager nav
+@page "/admin"
+
+<h3>Insertar en Authentication DB</h3>
+<MudSwitch @bind-Checked="@employer" Color="Color.Primary" />
+<MudTextField @bind-Value="email" Label="Email a registrar" Variant="Variant.Text"></MudTextField>
+<br />
+@if (employer)
+{
+    <MudText @bind-Value="email" Label="Rol" Variant="Variant.Text">Rol seleccionado: Employer</MudText>
+}
+else
+{
+    <MudText @bind-Value="email" Label="Rol" Variant="Variant.Text">Rol seleccionado: Employee</MudText>
+}
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Register"> Insertar</MudButton>
+
+@code {
+    public string email { get; set; }
+    public bool employer { get; set; } = true;
+
+    async Task Register()
+    {
+        AccountDTO accountData = new AccountDTO(email,"Prueba01!");
+        if (employer)
+        {
+            await AuthenticationService.RegisterRequestAsync(accountData);
+            await AuthorizationService.AssignRole(accountData.Email, "Employer");
+        }
+        else
+        {
+            await AuthenticationService.RegisterRequestAsync(accountData);
+            await AuthorizationService.AssignRole(accountData.Email, "Employee");
+        }
+        email = "yap";
+    }
+}

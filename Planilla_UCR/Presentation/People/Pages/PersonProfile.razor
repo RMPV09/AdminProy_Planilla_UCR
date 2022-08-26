@@ -1,0 +1,254 @@
+﻿@page "/Profile/{userEmail}"
+@using Domain.Agreements.Entities
+@using Domain.Employers.Entities
+@using Domain.Employers.DTOs
+@using Domain.People.Entities
+@using Domain.Subscriptions.Entities
+@using Domain.Authentication.DTOs
+@using Domain.Authentication
+@using Domain.Projects.Entities
+
+@using Application.Authentication
+@using Application.Employers
+@using Application.People
+@using Application.Authorization;
+@using Application.Authorization.Implementations;
+@using Application.Projects
+@using Application.Subscriptions
+@using Application.Agreements
+@using Application.Email
+
+@using Presentation.Core.Components
+@using Presentation.Shared.Models
+@using System.Text.RegularExpressions
+@using System.ComponentModel.DataAnnotations
+
+@inject NavigationManager nav
+@inject IPersonService PersonService
+@inject IEmployerService EmployerService
+@inject IAuthenticationService AuthenticationService
+@inject IProjectService ProjectService
+@inject IAgreementService AgreementService
+@inject ISubscriptionService SubscriptionService
+@inject IEmailServices EmailService
+@inject ISnackbar Snackbar
+
+@if(_loading) {
+
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+       
+    </MudPaper>
+}else{
+    @if (!_loading)
+    {
+          
+        List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Proyectos", href: $"Projects/{userEmail}"),
+            new BreadcrumbItem("Mi perfil",  href: null, disabled: true)
+        };
+
+        <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+        <MudGrid>
+            <MudItem xs="12" Class="d-flex justify-center align-center">
+                <MudItem xs="2">
+                </MudItem>
+                <MudItem xs="2">
+                </MudItem>
+                <MudItem xs="4">
+                     <MudText Align="Align.Center" Typo="Typo.h6" GutterBottom="true">Mi perfil</MudText>
+                </MudItem>
+               
+                <MudItem xs="4">
+                    <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" OnClick="GoToProfileConfig"/>
+                </MudItem>
+               
+            </MudItem>
+            
+        </MudGrid>
+    <MudGrid>
+        <MudItem xs="4"></MudItem>
+        <MudItem xs="6">
+        <MudItem xs="8">
+        <MudField Variant="Variant.Text"> <MudIcon Icon="@Icons.Filled.Email" Color="@Color.Primary" /> Email: @personInfo.Email</MudField>
+        </MudItem>
+        <MudItem xs="8">
+        <MudField Variant="Variant.Text"><MudIcon Icon="@Icons.Filled.Person" Color="@Color.Primary" /> Nombre: @personInfo.Name @personInfo.LastName1 @personInfo.LastName2</MudField>
+        </MudItem>
+        <MudItem xs="8">
+        <MudField Variant="Variant.Text"><MudIcon Icon="@Icons.Filled.Photo" Color="@Color.Primary" /> Cédula: @personInfo.Ssn </MudField>
+        </MudItem>
+        <MudItem xs="8">
+        <MudField Variant="Variant.Text"><MudIcon Icon="@Icons.Filled.CreditCard" Color="@Color.Primary" />  Cuenta bancaria: @personInfo.BankAccount</MudField>
+        </MudItem>
+        <MudItem xs="8">
+        <MudField Variant="Variant.Text"><MudIcon Icon="@Icons.Filled.LocationOn" Color="@Color.Primary" /> Dirección: @personInfo.Adress</MudField>
+        </MudItem>
+        <MudItem xs="8">
+        <MudField Variant="Variant.Text"><MudIcon Icon="@Icons.Filled.ContactPhone" Color="@Color.Primary" /> Teléfono: @personInfo.PhoneNumber</MudField>
+        </MudItem> 
+
+        <AuthorizeView Roles="Employer">
+            <Authorized> 
+                <MudButton Disabled="true"> </MudButton>
+                <MudItem xs="8">
+                    <MudButton OnClick="ProjectList" Variant="Variant.Filled" Color="Color.Transparent">
+                    <MudText>Borrar</MudText>
+                </MudButton>
+                </MudItem> 
+            </Authorized>
+        </AuthorizeView>
+        </MudItem>
+
+        <MudDialog @bind-IsVisible="visible" Options="dialogOptions">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="@Color.Primary" Class="mr-2"/> ¿Está seguro de que desea eliminar su cuenta? ¡Sus proyectos asociados quedaran inactivos! 
+                </MudText>
+            </TitleContent>
+             <DialogContent>
+                <MudTable @ref="mudTable" Items="@projectsList" FixedHeader="@fixed_header" FixedFooter="@fixed_footer" Height="@(fixed_header || fixed_footer ?"300px":"")">
+                    <HeaderContent>
+                    <MudTh>Proyectos:</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Proyectos:"> @context.ProjectName </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </DialogContent>
+
+            <DialogActions>
+                  <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="DeleteAccountEmployer" Class="px-10">Aceptar</MudButton>
+                  <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CloseDialog" Class="px-10">Cancelar</MudButton>
+            </DialogActions>
+        </MudDialog>
+    </MudGrid>
+    </MudPaper>
+
+    }
+    else
+    {
+        <MudText Align="Align.Center" Typo="Typo.h4"> Email incorrecto</MudText>
+    }
+}
+
+
+@code {
+    private bool _loading = true;
+    private bool _empty = true;
+    Person personInfo = new Person("", "", "", "", Int32.Parse("0"), "", "", "",1);
+    Person firedEmployee= new Person("", "", "", "", Int32.Parse("0"), "", "", "",1);
+    [Parameter] public string userEmail { get; set; }  
+    public string confirmationCodeEmail { get; set; }
+    private bool visible;
+    private bool open;
+    private MudTable<Project> mudTable;
+    private IEnumerable<Project> projectsList;
+    bool fixed_header = true;
+    bool fixed_footer = false;
+    SnackHandler snackHandler = new SnackHandler();
+    private IEnumerable<Agreement> agreementsList;
+    private IEnumerable<Subscription> benefitsList;
+    private IEnumerable<Subscription> deductionsList;
+
+    private void OpenDialog() => visible = true;
+    void CloseDialog() => visible = false;
+    private DialogOptions dialogOptions = new() { FullWidth = true };
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        personInfo.Email = userEmail;
+        personInfo = await PersonService.GetInfoPerson(personInfo);
+        if (personInfo.IsEnabled==1 && personInfo != null)
+        {
+            _loading = false;
+        }
+    }
+
+    async Task ProjectList(){
+        projectsList = await ProjectService.GetEmployerProyects(userEmail);
+        OpenDialog();
+    }
+
+    async Task DeleteAccountEmployer() 
+    {
+        projectsList = await ProjectService.GetEmployerProyects(userEmail);
+        foreach(var project in projectsList)
+        {
+            await DeleteBenefits(project.EmployerEmail,project.ProjectName);
+            await DeleteDeductions(project.EmployerEmail,project.ProjectName);
+            await DeleteAgreetments(project.EmployerEmail,project.ProjectName);
+            ProjectService.DisableProject(project.ProjectName, project.EmployerEmail);
+        }
+        EmployerService.DeleteEmployer(personInfo.Email);
+        ShowSnackNotification("Se ha eliminado la cuenta de "+personInfo.Name, Severity.Success);
+        nav.NavigateTo($"/delete", true);
+    }
+
+    private async Task DeleteBenefits(string employerEmail, string projectName)
+    {
+        benefitsList = await SubscriptionService.GetBenefitsByProject(employerEmail,projectName);
+        foreach(Subscription benefit in benefitsList)
+        {
+            SubscriptionService.DeleteSubscription(benefit);
+        }
+    }
+
+    private async Task DeleteDeductions(string employerEmail, string projectName)
+    {
+        deductionsList = await SubscriptionService.GetDeductionsByProject(employerEmail,projectName);
+        foreach(Subscription deduction in deductionsList)
+        {
+            SubscriptionService.DeleteSubscription(deduction);
+        }
+    }
+
+    async Task DeleteAgreetments(string employerEmail, string projectName)
+    {
+        agreementsList = await AgreementService.GetAllAgreementsByProjectAndEmployer(projectName,employerEmail);
+        var justification = "cierre de negocio";
+        EmailObject emailData = new EmailObject("", "", "", "", "");
+        foreach(var agreement in agreementsList)
+        {
+            firedEmployee.Email = agreement.EmployeeEmail;
+            firedEmployee = await PersonService.GetInfoPerson(firedEmployee);
+            var firedEmployeeName = firedEmployee.Name + " " + firedEmployee.LastName1;
+            var employerName = personInfo.Name+ " " + personInfo.LastName1 + " " + personInfo.LastName2;
+            await AgreementService.DesactivateAgreement(agreement.EmployeeEmail, agreement.EmployerEmail, agreement.ProjectName, justification);
+            emailData.EmployeeName = firedEmployeeName;
+            emailData.EmployerName = employerName;
+            emailData.ProjectName = agreement.ProjectName;
+            emailData.Message = justification;
+            emailData.Destiny = agreement.EmployeeEmail;
+            EmailService.SendFiredEmployeeEmail(emailData);
+        }
+    }
+
+    private void GoToProfileConfig()
+    {
+        nav.NavigateTo($"/Profile/{userEmail}/Configurations");
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+}

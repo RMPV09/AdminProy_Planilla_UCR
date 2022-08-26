@@ -1,0 +1,86 @@
+﻿@using Application.ContextMenu
+@using Presentation.Core.Components
+
+@inject IContextMenuService ContextMenuService
+
+@{
+    string _projectName = ContextMenuService.GetProjectsContext();
+}
+
+
+@if(!_isLoading)
+{
+    <li class="nav-item px-3">
+        <NavLink class="nav-link" href=@($"/") Match="NavLinkMatch.All">
+                <MudIconButton Icon="@Icons.Filled.Home" Color="@Color.Secondary" Class="mr-2"/>
+            <span  aria-hidden="true"></span> <MudText>Inicio</MudText>
+        </NavLink>
+    </li>
+
+    <li class="nav-item px-3">
+        <NavLink class="nav-link" href=@($"Projects/{email}") Match="NavLinkMatch.All">
+                <MudIconButton Icon="@Icons.Filled.BusinessCenter" Color="@Color.Secondary" Class="mr-2"/>
+            <span  aria-hidden="true"></span> <MudText>Proyectos</MudText>
+        </NavLink>
+    </li>
+
+    <li class="nav-item px-3">
+        <NavLink class="nav-link" href=@($"Approve_Projects_Payment/{email}") Match="NavLinkMatch.All">
+                <MudIconButton Icon="@Icons.Filled.CreditScore" Color="@Color.Secondary" Class="mr-2"/>
+            <span  aria-hidden="true"></span> <MudText>Aprobar pagos</MudText>
+        </NavLink>
+    </li>
+
+@if (ContextMenuService.GetReportsContext())
+{
+    <ReportDropDown icon="@Icons.Material.Filled.ArrowDropUp"> </ReportDropDown>
+} else
+{
+    <ReportDropDown icon="@Icons.Material.Filled.ArrowDropDown"> </ReportDropDown>
+    <TabNavLink   Icon="@Icons.Filled.LibraryBooks" href="@($"Projects_Historical_Payments/{email}")" text="Histórico pagos por proyecto"></TabNavLink>
+    <TabNavLink   Icon="@Icons.Filled.LibraryBooks" href="@($"Payments_Breakdown/{email}")" text="Desglose de pago"></TabNavLink>
+    <TabNavLink   Icon="@Icons.Filled.LibraryBooks" href="@($"Employee_History/{email}")" text="Histórico pagos por empleado"></TabNavLink>
+}
+
+    @if (ContextMenuService.GetShowProjectsMenu())
+    {
+        @if (!ContextMenuService.GetShowProjectsSubMenu())
+        {
+            <ProjectsDropDown icon="@Icons.Material.Filled.ArrowDropUp"></ProjectsDropDown>
+        }
+        else
+        {
+            <ProjectsDropDown icon="@Icons.Material.Filled.ArrowDropDown"></ProjectsDropDown>
+            <TabNavLink Icon="@Icons.Material.Filled.Assignment" href="@($"/Projects/{email}/{_projectName}")" text="Detalles"/>
+            <TabNavLink  Icon="@Icons.Filled.Approval" href="@($"/Approve_Hours/{email}/{_projectName}/")" text="Aprobar horas"></TabNavLink>
+            <TabNavLink  Icon="@Icons.Material.Filled.HistoryEdu" href="@($"/Agreements/{email}/{_projectName}/")" text="Contratar empleados"/>
+            <TabNavLink Icon="@Icons.Material.Filled.People" href="@($"/View_Project_Employees/{email}/{_projectName}")" text="Empleados contratados"/>
+            <TabNavLink  Icon="@Icons.Material.Filled.CardGiftcard" href="@($"/Projects/{email}/{_projectName}/Benefits")" text="Beneficios"/>
+            <TabNavLink  Icon="@Icons.Material.Filled.CardMembership" href="@($"/Projects/{email}/{_projectName}/Deductions")" text="Deducciones voluntarias"/>
+        }
+    }
+}
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+    private bool _isLoading { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ContextMenuService.SetOnChange(StateHasChanged);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isLoading = false;
+            InvokeAsync(StateHasChanged);
+        }
+        else
+        {
+        
+        }
+    }
+}

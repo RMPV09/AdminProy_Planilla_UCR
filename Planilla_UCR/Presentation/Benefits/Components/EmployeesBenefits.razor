@@ -1,0 +1,139 @@
+﻿@using Application.Subscribes
+@using Domain.Subscribes.Entities
+@using System
+@using System.Globalization
+@using Application.ContextMenu
+@inject ISnackbar Snackbar
+@inject NavigationManager nav
+@inject ISubscribeService SubscribeService
+@inject IContextMenuService ContextMenuService
+
+@if(_loading) {
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+    </MudPaper>
+}else{
+    @if (!_loading)
+    {
+        List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Proyectos", href: $"/Projects/{employeeEmail}"),
+            new BreadcrumbItem(@projectName, href: $"/Projects/{employeeEmail}/{ContextMenuService.GetEmployerEmailContext()}/{projectName}"),
+            new BreadcrumbItem("Beneficios",  href: null, disabled: true)
+        }; 
+        <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+        <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+        </MudPaper>
+
+        if(_empty)
+        {
+               <EmployeesBenefitsError employeeEmail="@employeeEmail" projectName="@projectName" SendTableState="SendConmuteSignal"></EmployeesBenefitsError>
+        }else
+        {
+            <MudTable @ref="_mudTable" Items="@_elements" RowsPerPage="4" MultiSelection="true" @bind-SelectedItems="_selectedItems1" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Filter="new Func<Subscribe,bool>(FilterFunc1)">  
+                <ToolBarContent>
+                        <MudButton OnClick="SendConmuteSignal"> Beneficios disponibles</MudButton>
+                        <MudButton Color="Color.Tertiary"> Mis beneficios </MudButton>
+                        <MudSpacer />
+                        <MudTextField @bind-Value="_searchString1" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                </ToolBarContent> 
+                <HeaderContent>
+                    <MudTh>Beneficio</MudTh>
+                    <MudTh>Fecha de Inicio</MudTh>
+                    <MudTh Style="text-align:right">Monto</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="Beneficio">@context.SubscriptionName</MudTd>
+                    <MudTd DataLabel="Fecha de Inicio">@context.StartDate.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Monto" Style="text-align:right"> @cultureCR.NumberFormat.CurrencySymbol @CostFormat(context.Cost)</MudTd>
+                </RowTemplate>
+
+                <PagerContent>
+                    <MudPagination SelectedChanged="PageChanged" Count="@((_mudTable.GetFilteredItemsCount() + _mudTable.RowsPerPage - 1) / _mudTable.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+                </PagerContent>
+            </MudTable>
+            <br>
+            <MudButton Variant="Variant.Filled" OnClick="Unsubscribe" Color="Color.Primary">
+                <MudText>
+                    Desuscribirse
+                </MudText> 
+            </MudButton>
+        }
+    }
+}
+
+@code {
+    private bool _hidePosition;
+    private bool _loading = true;
+    private bool _empty = true;
+    private string _searchString1 = "";
+    private IEnumerable<Subscribe> _elements = new List<Subscribe>();
+    private HashSet<Subscribe> _selectedItems1 = new HashSet<Subscribe>();
+    private MudTable<Subscribe> _mudTable;
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    [Parameter]
+    public string projectName { get; set; }
+    [Parameter]
+    public string employeeEmail { get; set; }
+    [Parameter]
+    public EventCallback<string> SendTableState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ContextMenuService.SetProjectsContext(true, true, projectName, ContextMenuService.GetEmployerEmailContext(), ContextMenuService.GetHoursEmployeeContext(), ContextMenuService.GetReportsContext());
+        _elements = await SubscribeService.GetBenefitsByEmployee(employeeEmail, projectName);
+        if (_elements.Length() > 0)
+        {
+            _empty = false;
+        }
+        _loading = false;
+    }
+
+    private void PageChanged(int i)
+    {
+        _mudTable.NavigateTo(i - 1);
+    }
+
+    private bool FilterFunc1(Subscribe element) => FilterFunc(element, _searchString1);
+
+    private bool FilterFunc(Subscribe element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.EmployeeEmail.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private async Task SendConmuteSignal()
+    {
+        await SendTableState.InvokeAsync("");
+    }
+
+    private async Task Unsubscribe()
+    {
+        if (_selectedItems1.Length() > 0)
+        {
+            foreach (Subscribe subscription in _selectedItems1)
+            {
+                SubscribeService.DeleteSubscribe(subscription);
+            }
+            Snackbar.Add("Suscripción finalizada con éxito", Severity.Success);
+            await SendConmuteSignal();
+        }
+        else
+        {
+            Snackbar.Add("Por favor seleccione los elementos a los que se desea desuscribir", Severity.Warning);
+        }
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+}

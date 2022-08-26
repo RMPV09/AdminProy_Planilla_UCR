@@ -1,0 +1,271 @@
+﻿@page "/Projects/{employerEmail}/{projectName}/Benefits/Configurations"
+@using Application.Subscriptions
+@using Domain.Subscriptions.Entities
+@using Application.Subscribes
+@using Domain.Subscribes.Entities
+@using Domain.People.Entities
+@using Application.People
+@using Application.Email
+@using Presentation.Core.Components
+@using Presentation.Benefits.Components
+@using System.Globalization
+@inject ISnackbar Snackbar
+@inject ISubscriptionService SubscriptionService
+@inject ISubscribeService SubscribeService
+@inject IEmailServices EmailService
+@inject IPersonService PersonService
+@inject NavigationManager nav
+
+@{List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{employerEmail}"),
+        new BreadcrumbItem($"{projectName}", href: $"/Projects/{employerEmail}/{projectName}"),
+        new BreadcrumbItem("Beneficios", href: $"/Projects/{employerEmail}/{projectName}/Benefits"),
+        new BreadcrumbItem("Configuraciones", href: null, disabled: true),
+    };
+}
+
+@if (_loading)
+{
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+         <MudText Align="Align.Center" Typo="Typo.h6">
+              <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+         </MudText>
+    </MudPaper>
+}
+else
+{   
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    @if (_empty)
+    {
+        <MudText Typo="Typo.h6" Align="Align.Center">No hay deducciones asociadas al proyecto
+        </MudText>
+        <br>
+        <MudToolBar DisableGutters="true" Class="gap-4">
+            <MudButton></MudButton>
+            <MudSpacer></MudSpacer>
+            <MudButton Variant="Variant.Filled" OnClick="GoToCreate" Color="Color.Primary">
+                <MudText> 
+                Crear deducción voluntaria
+                </MudText> 
+            </MudButton>
+            <MudSpacer></MudSpacer>
+            <MudButton></MudButton>
+        </MudToolBar>
+    }
+    else
+    {
+        <MudTable @ref="_mudTable" Items="@_elements" RowsPerPage="4" MultiSelection="true" @bind-SelectedItems="_selectedItems1" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Filter="new Func<Subscription,bool>(FilterFunc1)">
+            <ToolBarContent>
+                <MudText Align="Align.Center" Typo="Typo.h6">Lista de beneficios </MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="searchString1" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Nombre</MudTh>
+                <MudTh>Proveedor</MudTh>
+                <MudTh Style="text-align:right">Costo</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Nombre">
+                    <MudLink Color="Color.Primary" Underline="Underline.Always" Href="@($"/Projects/{@context.EmployerEmail}/{@context.ProjectName}/Benefits/{@context.SubscriptionName}")">
+                        @context.SubscriptionName
+                    </MudLink>
+                </MudTd>
+                <MudTd DataLabel="Descripción">@context.ProviderName</MudTd>
+                <MudTd DataLabel="Costo" Style="text-align:right"> @cultureCR.NumberFormat.CurrencySymbol @CostFormat(context.Cost) </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudPagination SelectedChanged="PageChanged" Count="@((_mudTable.GetFilteredItemsCount() + _mudTable.RowsPerPage - 1) / _mudTable.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+            </PagerContent>
+        </MudTable>
+        <br>
+
+        <MudToolBar DisableGutters="true" Class="gap-4">
+            <MudButton Variant="Variant.Filled" OnClick="OpenDialog" Color="Color.Primary">Borrar</MudButton>
+        </MudToolBar>
+
+        <MudDialog @bind-IsVisible="_visible" Options="_dialogOptions">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="@Color.Primary" Class="mr-2"/> ¿Está seguro de borrar estos beneficios?</MudText>
+            </TitleContent>
+            <DialogContent>
+                <MudTable @ref="_mudTable" Items="@_selectedItems1" FixedHeader="@fixed_header" FixedFooter="@fixed_footer" Height="@(fixed_header || fixed_footer ?"300px":"")">
+                    <HeaderContent>
+                    <MudTh>Nombre</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Nombre"> @context.SubscriptionName </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </DialogContent>
+            <DialogActions>
+                 <MudButton Disabled="@snackHandler._saving" OnClick="DeleteBenefits" Variant="Variant.Filled" Color="Color.Primary">
+                        @if (snackHandler._saving)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                            <MudText Class="ms-2">Procesando</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Aceptar</MudText>
+                        }
+                    </MudButton>
+                  <MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CloseDialog" Class="px-10">Cancelar</MudButton>
+            </DialogActions>
+        </MudDialog>
+
+        <MudDialog @bind-IsVisible="_visibleEmployees" Options="_dialogOptionsEmployees">
+            <TitleContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Delete" Color="@Color.Primary" Class="mr-2"/> Lista de empleados afectados por la operación:</MudText>
+            </TitleContent>
+            <DialogContent>
+                <MudTable @ref="_table" Items="@_employees" FixedHeader="@fixed_header" FixedFooter="@fixed_footer" Height="@(fixed_header || fixed_footer ?"300px":"")">
+                    <HeaderContent>
+                    <MudTh>Deducción voluntaria</MudTh>
+                    <MudTh>Email</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Deducción"> @context.SubscriptionName</MudTd>
+                        <MudTd DataLabel="Email"> @context.EmployeeEmail</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </DialogContent>
+            <DialogActions>
+                  <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GoToMain" Class="px-10">Aceptar</MudButton>
+            </DialogActions>
+        </MudDialog>
+    }
+}
+
+@code {
+    private bool _empty = true;
+    private bool _loading = true;
+    private HashSet<Subscription> _selectedItems1 = new HashSet<Subscription>();
+    private IEnumerable<Subscription> _elements;
+    private IList<Subscribe> _employees = new List<Subscribe>();
+    private MudTable<Subscription> _mudTable;
+    private MudTable<Subscribe> _table;
+    public string searchString1 = "";
+    SnackHandler snackHandler = new SnackHandler();
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+
+    private bool _visible;
+    private bool _open;
+    void CloseDialog() => _visible = false;
+    private DialogOptions _dialogOptions = new() { FullWidth = true };
+
+    private bool _visibleEmployees;
+    private bool _openEmployees;
+    private void OpenDialogEmployee() => _visibleEmployees = true;
+    void CloseDialogEmployees() => _visibleEmployees = false;
+    private DialogOptions _dialogOptionsEmployees = new() { FullWidth = true };
+
+    bool fixed_header = true;
+    bool fixed_footer = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _elements = await SubscriptionService.GetBenefitsByProject(employerEmail, projectName);
+        _loading = false;
+        if (_elements.Length() > 0)
+        {
+            _empty = false;
+        }
+    }
+
+    private void OpenDialog()
+    {
+        if (_selectedItems1.Length() > 0)
+        {
+            _visible = true;
+        }
+        else
+        {
+            Snackbar.Add("Por favor seleccione los elementos a los que se desea suscribir", Severity.Warning);
+        }
+    } 
+
+    private async Task DeleteBenefits()
+    {
+        snackHandler._saving = true;
+        foreach (Subscription toDelete in _selectedItems1)
+        {
+            IList<Subscribe> tempList = (await SubscribeService.GetEmployeesBySubscription(employerEmail, projectName, toDelete.SubscriptionName)).ToList();
+            tempList = tempList.Where(e => e.EndDate == null).ToList();
+            if (tempList.Length() > 0)
+            {
+                foreach (Subscribe toAppend in tempList)
+                {
+                    _employees.Add(toAppend);
+                }
+            }
+            SubscriptionService.DeleteSubscription(toDelete);
+        }
+        CloseDialog();
+        if (_employees.Length() > 0)
+        {
+            await SendEmployeeEmails();
+            snackHandler._saving = false;
+            Snackbar.Add("Beneficios borrados", Severity.Success);
+            OpenDialogEmployee();
+        }
+        else
+        {
+            Snackbar.Add("Beneficios borrados", Severity.Success);
+            GoToMain();
+        }
+    }
+
+    private bool FilterFunc1(Subscription element) => FilterFunc(element, searchString1);
+
+    private bool FilterFunc(Subscription element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.SubscriptionName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private void PageChanged(int i)
+    {
+        _mudTable.NavigateTo(i - 1);
+    }
+
+    private void GoToMain()
+    {
+        nav.NavigateTo($"/Projects/{employerEmail}/{projectName}/Benefits", true);
+    }
+
+    private void GoToCreate()
+    {
+        nav.NavigateTo($"/Projects/{employerEmail}/{projectName}/Deductions/New");
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+
+    private async Task SendEmployeeEmails()
+    {
+        Person employer = await PersonService.GetPerson(employerEmail);
+        string employerFullName = employer.Name + " " + employer.LastName1 + " " + employer.LastName2;
+        foreach (Subscribe endedSubcription in _employees)
+        {
+            Person employee = await PersonService.GetPerson(endedSubcription.EmployeeEmail);
+            string employeeFullName = employee.Name + " " + employee.LastName1 + " " + employee.LastName2;
+            EmailObject emailData = new EmailObject(employeeFullName, employerFullName, projectName, "", endedSubcription.EmployeeEmail);
+            EmailService.SendDeletedSubscriptionEmail(emailData, endedSubcription.SubscriptionName);
+        }
+
+    }
+}

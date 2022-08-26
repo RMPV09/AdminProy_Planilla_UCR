@@ -1,0 +1,143 @@
+﻿@using ChartJs.Blazor
+@using ChartJs.Blazor.BarChart
+@using ChartJs.Blazor.Common
+@using ChartJs.Blazor.Common.Axes
+@using ChartJs.Blazor.Common.Axes.Ticks
+@using ChartJs.Blazor.Common.Enums
+@using ChartJs.Blazor.Util
+
+<Chart Height="200" Config="_configBarChart"></Chart>
+ 
+@code {
+    [Parameter]
+    public Dictionary<string, double>? data { get; set; }
+    [Parameter]
+    public Dictionary<string, double>? data2 { get; set; }
+    [Parameter]
+    public Dictionary<string, double>? data3 { get; set; }
+    [Parameter]
+    public string title { get; set; }
+    [Parameter]
+    public IList<string> colorList { get; set; }
+
+    private BarConfig _configBarChart;
+
+
+    private void ConfigurationBarChart()
+    {
+        _configBarChart = new BarConfig();
+        {
+            _configBarChart.Options = new BarOptions
+            {
+                Legend = new Legend
+                {
+                    Display = false
+                },
+                Title = new OptionsTitle
+                {
+                    Display = true,
+                    Text = title
+
+                },
+                Responsive = true,
+                Scales = new BarScales
+                {
+                    YAxes = new List<CartesianAxis>
+{
+                    new LinearCartesianAxis{
+                        ScaleLabel = new ScaleLabel("")
+                        {
+                            Display = true
+                        },
+                        Ticks = new LinearCartesianTicks {
+
+                            BeginAtZero = true,
+                            Precision = 0,
+
+                        }
+                    }
+                },
+                    XAxes = new List<CartesianAxis>
+{
+                    new CategoryAxis {
+                        ScaleLabel = new ScaleLabel("")
+                        {
+                                Display = true
+                        },
+                        Ticks = new CategoryTicks()
+                        {
+                            Display = true,
+                        },
+                        Display = AxisDisplay.True
+                    }
+                }
+                }
+            };
+        };
+    }
+
+    protected override void OnInitialized()
+    {
+        ConfigurationBarChart();
+        FillBarChart(data, data2, data3);
+    }
+
+    public void FillBarChart(IDictionary<string, double> data, IDictionary<string, double> data2, IDictionary<string, double> data3)
+    {
+        foreach (string item in data.Keys)
+        {
+            _configBarChart.Data.Labels.Add(item);
+        }
+
+         IList<string> colorslist = new List<string>()
+        {
+           {ColorUtil.ColorHexString(2, 109, 126)},
+        };
+        string []colors = new string[data.Length()];
+        for (var i = 0; i < data.Length(); i++)
+        {
+            colors[i] = colorslist[i%colorslist.Length()];
+        }
+        BarDataset<double> dataset= new BarDataset<double>(data.Values)
+        {
+            BackgroundColor = colors, 
+            Label = "",
+        };
+
+         IList<string> colorslist2 = new List<string>()
+        {
+            {ColorUtil.ColorHexString(59, 113, 151)},
+        };
+        string []colors2 = new string[data.Length()];
+        for (var i = 0; i < data.Length(); i++)
+        {
+            colors2[i] = colorslist2[i%colorslist2.Length()];
+        }
+
+
+        BarDataset<double> dataset2= new BarDataset<double>(data2.Values)
+        {
+            BackgroundColor = colors2, 
+            Label = "",
+        };
+
+         IList<string> colorslist3 = new List<string>()
+        {
+            {ColorUtil.ColorHexString(0, 147, 147)},
+        };
+        string []colors3 = new string[data.Length()];
+        for (var i = 0; i < data.Length(); i++)
+        {
+            colors3[i] = colorslist3[i%colorslist2.Length()];
+        }
+
+        BarDataset<double> dataset3= new BarDataset<double>(data3.Values)
+        {
+            BackgroundColor = colors3, 
+            Label = "",
+        };
+        _configBarChart.Data.Datasets.Add(dataset);
+        _configBarChart.Data.Datasets.Add(dataset2);
+        _configBarChart.Data.Datasets.Add(dataset3);
+    }
+}

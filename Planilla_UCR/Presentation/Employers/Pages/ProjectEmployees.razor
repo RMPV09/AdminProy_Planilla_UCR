@@ -1,0 +1,280 @@
+﻿@page "/View_Project_Employees/{email}/{projectName}"
+
+@using Domain.Agreements.DTOs
+@using Application.Agreements
+@using Domain.Agreements.Entities
+@using Application.People
+@using Domain.People.Entities
+@using Domain.Employees.Entities
+@using Application.Employees
+@using Application.Employers
+@using Domain.Employers.Entities
+@using Domain.Employers.DTOs
+@using Application.AgreementTypes
+@using Domain.AgreementTypes.Entities
+@using Domain.AgreementTypes.DTOs
+@using Domain.Projects.DTOs
+@using Domain.Projects.Entities
+@using Application.Projects
+@using Presentation.Projects.Models
+@using Presentation.Core.Components
+@using System.ComponentModel.DataAnnotations
+@using Presentation.Employers.Models
+@using Application.ContextMenu
+
+@inject IProjectService ProjectService
+@inject ISnackbar Snackbar
+@inject IAgreementService AgreementService
+@inject IAgreementTypeService AgreementTypeService
+@inject IEmployeeService EmployeeService
+@inject IContextMenuService ContextMenuService
+@inject NavigationManager nav
+@inject IDialogService DialogService
+
+@if (_loading)
+{
+	<MudPaper Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+		<MudText Align="Align.Center" Typo="Typo.h6">
+			<MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+		</MudText>
+	</MudPaper>
+}
+else
+{
+	List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+	{
+		new BreadcrumbItem("Proyectos", href: $"/Projects/{email}"),
+		new BreadcrumbItem(@projectName, href: $"/Projects/{email}/{projectName}"),
+		new BreadcrumbItem("Empleados contratados",  href: null, disabled: true)
+	};
+	<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+	<MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0">
+	</MudPaper>
+	if (!_empty)
+	{
+		<MudTable @ref="@_table" Items="@_myJoin" RowsPerPage="4" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" Filter="new Func<HiredEmployeesJoinedTables,bool>(Filter)">
+			<ToolBarContent>
+				<MudText> Empleados contratados </MudText>
+				<MudSpacer />
+				<MudTextField @bind-Value="_mySearchString" Immediate="true" Placeholder="Buscar email" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+			</ToolBarContent>
+			<ColGroup>
+				<col style="width: 175px;" />
+				<col />
+				<col />
+				<col />
+				<col />
+				<col />
+				<col />
+			</ColGroup>
+			<HeaderContent>
+				<MudTh Style="text-align:justify-all">Nombre completo</MudTh>
+				<MudTh Style="text-align:justify-all">Email </MudTh>
+				<MudTh Style="text-align:justify-all">Tipo contrato </MudTh>
+				<MudTh Style="text-align:justify-all">Intervalo pago</MudTh>
+				<MudTh Style="text-align:justify-all">Inicio contrato</MudTh>
+				<MudTh Style="text-align:justify-all">Fin contrato</MudTh>
+				<MudTh Style="text-align:justify-all"> Salario bruto por hora</MudTh>
+				<MudTh Style="text-align:justify-all"> Acción</MudTh>
+			</HeaderContent>
+			<RowTemplate>
+				<MudTd DataLabel="Nombre completo" Style="text-align:justify-all">@context.Name @context.LastName1 @context.LastName2</MudTd>
+				<MudTd DataLabel="Email" Style="text-align:justify-all">@context.EmployeeEmail</MudTd>
+				<MudTd DataLabel="Tipo contrato" Style="text-align:justify-all">@context.ContractType</MudTd>
+				<MudTd DataLabel="Intervalo pago" Style="text-align:justify-all">@context.PaymentInterval</MudTd>
+				<MudTd DataLabel="Inicio contrato" Style="text-align:justify-all">@context.ContractStartDate.ToShortDateString()</MudTd>
+				<MudTd DataLabel="Fin contrato" Style="text-align:justify-all">@context.ContractFinishDate.ToShortDateString()</MudTd>
+				<MudTd DataLabel="Salario bruto por hora<" Style="text-align:right">₡@context.MountPerHour,00</MudTd>
+				<MudTd DataLabel="Terminar">
+					<MudButton Variant="Variant.Filled" @onclick="@(e => OpenDialog(@context.EmployeeEmail))" Color="Color.Transparent">Terminar</MudButton>
+				</MudTd>
+			</RowTemplate>
+			<PagerContent>
+				<MudPagination SelectedChanged="PageChanged" Count="@((_table.GetFilteredItemsCount() + _table.RowsPerPage - 1) / _table.RowsPerPage)" Color="Color.Primary" Class="pa-4" />
+			</PagerContent>
+		</MudTable>
+	}
+	else
+	{
+		<MudPaper Height="320px" Width="100%" Outlined="true" Class="pa-32" Elevation="25">
+			<MudToolBar>
+				<MudText> Empleados contratados  </MudText>
+				<MudSpacer />
+				<MudTextField @bind-Value="_mySearchString" Placeholder="Buscar email" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+			</MudToolBar>
+			<MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0">
+			</MudPaper>
+			<br />
+			<MudText Align="Align.Center" Typo="Typo.h5">No hay empleados contratados en @projectName</MudText>
+			<br />
+		</MudPaper>
+	}
+	<br>
+	<MudButton Variant="Variant.Filled" OnClick="GoToCreateEmployee" Color="Color.Primary">
+		<MudText>
+			Registrar Empleados
+		</MudText>
+	</MudButton>
+	<MudDialog @bind-IsVisible="_visible" Options="_dialogOptions">
+		<TitleContent>
+			<MudText Typo="Typo.h6" Style="text-align:center">
+				¿Está seguro de terminar el contrato con el empleado?
+			</MudText>
+			<MudText Typo="Typo.h6" Style="text-align:center">
+				Esta acción es irreversible
+			</MudText>
+		</TitleContent>
+		<DialogContent>
+			<MudTextField @bind-Value="_justificationToBeDeleted" Lines="10" Label="Justificación" Variant="Variant.Outlined" Required="true" RequiredError="Por favor, indique el motivo del despido"></MudTextField>
+		</DialogContent>
+		<DialogActions>
+			<MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="@(e => FireEmployee())" Class="px-10">Aceptar</MudButton>
+			<MudButton Variant="Variant.Filled" Color="Color.Transparent" OnClick="CloseDialog" Class="px-10">Cancelar</MudButton>
+		</DialogActions>
+	</MudDialog>
+}
+
+@code {
+	[Parameter]
+	public string projectName { get; set; }
+	[Parameter]
+	public string email { get; set; }
+	[CascadingParameter] MudDialogInstance MudDialog { get; set; }
+	private DialogOptions _dialogOptions = new() { FullWidth = true };
+	private IEnumerable<Project> _projects = new List<Project>();
+	private IEnumerable<Agreement> _agreements = new List<Agreement>();
+	private IEnumerable<AgreementType> _agreementType = new List<AgreementType>();
+	private IEnumerable<Person> _hiredEmployees = new List<Person>();
+	private IEnumerable<HiredEmployeesJoinedTables> _myJoin = new List<HiredEmployeesJoinedTables>();
+	private MudTable<HiredEmployeesJoinedTables> _table;
+	private bool _loading = true;
+	private string _mySearchString = "";
+	private bool _empty = true;
+	private string _employerEmailToBeDeleted = "";
+	private string _projectNameToBeDeleted = "";
+	private string _justificationToBeDeleted = "";
+	private string _employeeEmailToBeDeleted = "";
+	private bool _visible = false;
+
+	protected override async Task OnInitializedAsync()
+	{
+		ContextMenuService.SetProjectsContext(ContextMenuService.GetShowProjectsMenu(), ContextMenuService.GetShowProjectsSubMenu(), ContextMenuService.GetProjectsContext(), ContextMenuService.GetEmployerEmailContext(), ContextMenuService.GetHoursEmployeeContext(), ContextMenuService.GetReportsContext());
+		_empty = false;
+		_projects = await ProjectService.GetEmployerProyects(email);
+		_agreements = await AgreementService.GetAllAgreementsByProjectAndEmployer(projectName, email);
+		_agreementType = await AgreementTypeService.GetAllAgreementTypes();
+		_hiredEmployees = await EmployeeService.GetProjectEmployees(projectName, email);
+		PopulateJoinAttribute();
+		CheckJoinLenght();
+		_loading = false;
+	}
+
+	private void PopulateJoinAttribute()
+	{
+		_myJoin = from P in _projects
+						join A in _agreements on P.ProjectName equals A.ProjectName
+						join Pe in _hiredEmployees on A.EmployeeEmail equals Pe.Email
+
+						select new HiredEmployeesJoinedTables
+					  {
+						  PaymentInterval = P.PaymentInterval,
+						  EmployeeEmail = A.EmployeeEmail,
+						  ContractType = A.ContractType,
+						  ContractStartDate = (DateTime)A.ContractStartDate,
+						  ContractFinishDate = (DateTime)A.ContractFinishDate,
+						  MountPerHour = A.MountPerHour,
+						  Name = Pe.Name,
+						  LastName1 = Pe.LastName1,
+						  LastName2 = Pe.LastName2
+					  };
+	}
+
+	private void CheckJoinLenght()
+	{
+		if (_myJoin.Length() == 0)
+		{
+			_empty = true;
+		}
+	}
+
+	private void OpenDialog(string employeeEmail)
+	{
+		_employeeEmailToBeDeleted = employeeEmail;
+		_employerEmailToBeDeleted = email;
+		_projectNameToBeDeleted = projectName;
+		_visible = true;
+	}
+
+	private void CloseDialog()
+	{
+		_visible = false;
+		_justificationToBeDeleted = "";
+	}
+
+	private async Task FireEmployee()
+	{
+		bool chekedJustificationLength = CheckJustificationLength();
+		if (chekedJustificationLength)
+		{
+			CloseDialog();
+			await AgreementService.DesactivateAgreement(_employeeEmailToBeDeleted, _employerEmailToBeDeleted, _projectNameToBeDeleted, _justificationToBeDeleted);
+			ShowSnackNotification("El empleado con el email " + _employeeEmailToBeDeleted + " ha sido eliminado del proyecto", Severity.Success);
+			await Task.Delay(2000); // Time in miliseconds
+			nav.NavigateTo($"/View_Project_Employees/{email}/{projectName}", true);
+		}
+		else
+		{
+			CloseDialog();
+		}
+	}
+
+	private void PageChanged(int i)
+	{
+		_table.NavigateTo(i - 1);
+	}
+
+	private bool Filter(HiredEmployeesJoinedTables element) => FilterFunction(element, _mySearchString);
+
+	private bool FilterFunction(HiredEmployeesJoinedTables element, string searchString)
+	{
+		if (string.IsNullOrWhiteSpace(searchString))
+			return true;
+		if (element.EmployeeEmail.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+			return true;
+		return false;
+	}
+
+	private void GoToCreateEmployee()
+	{
+		nav.NavigateTo($"/Create_Employee/{email}/{projectName}");
+	}
+
+	void ShowSnackNotification(string message, Severity severity)
+	{
+		Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+		Snackbar.Configuration.PreventDuplicates = false;
+		Snackbar.Configuration.MaxDisplayedSnackbars = 2;
+		Snackbar.Configuration.VisibleStateDuration = 3000;
+		Snackbar.Configuration.NewestOnTop = true;
+		Snackbar.Add($"{message}", severity, config =>
+		{
+			config.RequireInteraction = false;
+			config.ShowCloseIcon = true;
+			config.Onclick = snackbar =>
+			{
+				return Task.CompletedTask;
+			};
+		});
+	}
+
+	private bool CheckJustificationLength()
+	{
+		bool result = true;
+		if (_justificationToBeDeleted.Length == 0)
+		{
+			result = false;
+			ShowSnackNotification("Por favor, escriba una justificación", Severity.Error);
+		}
+		return result;
+	}
+}

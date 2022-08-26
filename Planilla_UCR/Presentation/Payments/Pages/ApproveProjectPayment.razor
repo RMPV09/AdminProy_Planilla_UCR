@@ -1,0 +1,367 @@
+﻿@page "/Approve_Projects_Payment/{email}"
+
+@using Application.Agreements
+@using Application.Payments.Models
+@using Domain.Agreements.Entities
+@using Application.Projects
+@using Domain.Projects.Entities
+@using Domain.Payments.Entities
+@using Application.Payments
+@using Domain.People.Entities
+@using Application.People
+@using Domain.Employees.Entities
+@using Application.Employees
+@using Domain.ReportOfHours.Entities
+@using Application.ReportOfHours
+@using Domain.Subscribes.Entities
+@using Domain.Subscriptions.Entities
+@using Application.Subscribes
+@using Presentation.Payments.Models
+@using System.Globalization
+@using Application.PaymentCalculator;
+@using Application.TaxCalculator;
+
+@inject IAgreementService AgreementService
+@inject IProjectService ProjectService
+@inject IPaymentService PaymentService
+@inject IPersonService PersonService
+@inject IReportOfHoursService ReportHoursService
+@inject ISubscribeService SubscribeService
+@inject IPaymentCalculatorService PaymentCalculatorService
+@inject ITaxCalculatorService TaxCalculatorService
+@inject ISnackbar Snackbar
+@inject NavigationManager nav
+
+
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Aprobar pagos",  href: null, disabled: true),
+    };
+}
+
+@if (_loading) {
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+        <MudText Align="Align.Center" Typo="Typo.h6">
+            <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+        </MudText>
+
+    </MudPaper>
+} else
+{
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    @if (_empty)
+    {
+        <MudPaper  Height="220px" Width="100%" Outlined="true" Class="pa-32" Elevation="25">  
+            <MudToolBar>
+                <MudText Align="Align.Center" Typo="Typo.h6">Proyectos con pagos pendientes en @_nextPay.ToShortDateString()</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="searchString1" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </MudToolBar> 
+            <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+            </MudPaper>
+            <br />
+            <MudText Align="Align.Center" Typo="Typo.h5">No hay pagos pendientes en ningún proyecto</MudText>
+            <br />
+        </MudPaper>
+    }
+    else
+    {
+        <MudTable @ref="_mudTable" Items="@_projectsList" RowsPerPage="4" MultiSelection="true" @bind-SelectedItems="_selectedItems1" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Filter="new Func<ProjectModel,bool>(FilterFunc1)">
+            <ToolBarContent>
+                <MudText Align="Align.Center" Typo="Typo.h6">Proyectos con pagos pendientes en @_nextPay.ToShortDateString()</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="searchString1" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Nombre</MudTh>
+                <MudTh>Intervalo de pago</MudTh>
+                <MudTh>Último pago</MudTh>
+                <MudTh Style="text-align:right">Monto a pagar</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Nombre">
+                    <MudLink Color="Color.Primary" Underline="Underline.Always" Href="@($"/Approve_Payment/{email}/{context.ProjectName}")">
+                                @context.ProjectName
+                    </MudLink>
+                </MudTd>
+                <MudTd DataLabel="Intervalo de pago">@context.PaymentInterval</MudTd>
+                 <MudTd DataLabel="Último pago">@context.LastPaymentDate.ToShortDateString()</MudTd>
+                <MudTd DataLabel="Costo" Style="text-align:right"> @cultureCR.NumberFormat.CurrencySymbol @CostFormat(context.MountToPay) </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudPagination SelectedChanged="PageChanged" Count="@((_mudTable.GetFilteredItemsCount() + _mudTable.RowsPerPage - 1) / _mudTable.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+            </PagerContent>
+        </MudTable>        <br>
+        <MudToolBar DisableGutters="true" Class="gap-4">
+            <MudButton Variant="Variant.Filled" OnClick="RegisterPayment" Color="Color.Primary">Pagar</MudButton>
+        </MudToolBar>
+    }
+}
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+    private bool _loading = true;
+    private bool _empty = true;
+    private DateTime _nextPay = DateTime.Now;
+    private IList<Project> _projects = new List<Project>();
+    private IList<ProjectModel> _projectsList = new List<ProjectModel>();
+    private IList<ProjectModel> _projectsToDelete = new List<ProjectModel>();
+    private MudTable<ProjectModel> _mudTable;
+    private HashSet<ProjectModel> _selectedItems1 = new HashSet<ProjectModel>();
+    private HoursReport _report = new HoursReport();
+    public string searchString1 = "";
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _projects = (IList<Project>) await ProjectService.GetEmployerProyects(email);
+        await GetProjectsToPay();
+        _loading = false;
+    }
+
+    private async Task GetProjectsToPay()
+    {
+        foreach (Project _project in _projects)
+        {
+            var _daysInterval = GetDaysInterval(_project.PaymentInterval, _project.LastPaymentDate);
+            if (_project.LastPaymentDate.AddDays(_daysInterval) <= _nextPay)
+            {
+                ProjectModel _projectModel = new ProjectModel(_project.ProjectName, _project.EmployerEmail,
+                    _project.PaymentInterval, _project.LastPaymentDate,
+                    GetDaysInterval(_project.PaymentInterval, _project.LastPaymentDate), 0, new List<EmployeeAgreement>());
+                _projectsList.Add(_projectModel);
+            }
+        }
+        await GetProjectsMountToPay();
+        if (_projectsList.Length() > 0)
+        {
+            _empty = false;
+        }
+    }
+
+    private async Task GetProjectsMountToPay()
+    {
+        foreach (ProjectModel _pModel in _projectsList)
+        {
+            IList<Agreement> _employees = await AgreementService.GetProjectAgreements(_pModel.ProjectName, _pModel.EmployerEmail);
+
+            Payment _payment = new Payment("", _pModel.EmployerEmail, _pModel.ProjectName, 0,
+                _pModel.LastPaymentDate, _pModel.LastPaymentDate.AddDays(_pModel.DayInterval));
+            IList<Payment> _paidEmployees = await PaymentService.GetProjectPayments(_payment);
+            foreach (Agreement _employeeAgreement in _employees)
+            {
+                if (_paidEmployees.Where(e => e.EmployeeEmail == _employeeAgreement.EmployeeEmail).Length() == 0)
+                {
+                    double _mountToPay = 0;
+                    _mountToPay = await GetSalary(_employeeAgreement, _pModel.DayInterval, _pModel.LastPaymentDate);
+                    _pModel.MountToPay += _mountToPay;
+                    EmployeeAgreement projectEmployee = new EmployeeAgreement();
+                    projectEmployee.EmployeeEmail = _employeeAgreement.EmployeeEmail;
+                    projectEmployee.MountToPay = _mountToPay;
+                    _pModel.EmployeeList.Add(projectEmployee);
+                }
+            }
+            if (_pModel.MountToPay == 0)
+            {
+                _projectsToDelete.Add(_pModel);
+            }
+        }
+        foreach (ProjectModel toDelete in _projectsToDelete)
+        {
+            _projectsList.Remove(toDelete);
+        }
+    }
+
+    private async Task<double> GetSalary(Agreement agreement, int daysInterval, DateTime lastPaymentDate)
+    {
+        double salary = await GetSalaryByType(agreement, daysInterval, lastPaymentDate);
+        salary += TaxCalculatorService.GetEmployerSocialCharges(salary);
+        double appliedBenefits = await GetEmployeeBenefits(agreement, daysInterval, lastPaymentDate);
+        salary += appliedBenefits;
+        return salary;
+    }
+
+    private async Task<double> GetSalaryByType(Agreement agreement, int daysInterval, DateTime lastPaymentDate)
+    {
+        int workedDays = GetWorkedDays(agreement.EmployeeEmail, (DateTime)agreement.ContractStartDate, daysInterval);
+        double grossSalary = 0;
+        if (agreement.ContractType == "Tiempo completo")
+        {
+            grossSalary = PaymentCalculatorService.GetFullTimeSalary(agreement.MountPerHour, workedDays);
+        }
+        if (agreement.ContractType == "Medio tiempo")
+        {
+            grossSalary = PaymentCalculatorService.GetPartTimeSalary(agreement.MountPerHour, workedDays);
+        }
+        if (agreement.ContractType == "Servicios profesionales")
+        {
+            double workedHours = await GetWorkedHours(agreement, daysInterval, lastPaymentDate);
+            grossSalary = PaymentCalculatorService.GetSalaryPerHours(agreement.MountPerHour, workedHours);
+        }
+        return grossSalary;
+    }
+
+    private int GetWorkedDays(string employeeEmail, DateTime startDate, int daysInterval)
+    {
+        DateTime _nextPayment = startDate.AddDays(daysInterval);
+        int _workedDays = Convert.ToInt32(daysInterval);
+        if (startDate.Month == _nextPayment.Month)
+        {
+            _workedDays = (_nextPayment - startDate).Days;
+        }
+        int _workedWeeks = _workedDays / 7;
+        _workedDays -= _workedWeeks;
+        if (startDate.Date > _nextPayment.Date)
+        {
+            _workedDays = 0;
+        }
+        return _workedDays;
+    }
+
+    private async Task<double> GetEmployeeBenefits(Agreement agreement, int daysInterval, DateTime lastPaymentDate)
+    {
+        double mountOfBenefits = 0;
+        Subscribe searchSubscribe= new Subscribe(agreement.EmployeeEmail, agreement.EmployerEmail, agreement.ProjectName, "", 0.0, lastPaymentDate, lastPaymentDate.AddDays(daysInterval));
+        IEnumerable<Subscription> subscriptions = await SubscribeService.GetSubscribes(searchSubscribe);
+        foreach (Subscription _subscription in subscriptions.Where(e=> e.TypeSubscription == 1))
+        {
+            mountOfBenefits += _subscription.Cost;
+        }
+        return mountOfBenefits;
+    }
+
+    private async Task<double> GetWorkedHours(Agreement agreement, int daysInterval, DateTime lastPaymentDate)
+    {
+        double _workedHours = 0;
+        _report.EmployeeEmail = agreement.EmployeeEmail;
+        _report.ReportDate = lastPaymentDate;
+        IList<HoursReport> reports = await ReportHoursService.GetEmployeeReports(_report, lastPaymentDate.AddDays(daysInterval));
+        foreach (HoursReport hours in reports)
+        {
+            _workedHours += hours.ReportHours;
+        }
+        return _workedHours;
+    }
+
+    public int GetDaysInterval(string paymentInterval, DateTime lastPaymentDate)
+    {
+        int _days = 0;
+
+        switch (paymentInterval)
+        {
+            case "Semanal":
+                {
+                    _days = 7;
+                }break;
+            case "Bisemanal":
+                {
+                    _days = 15;
+                }break;
+            case "Quincenal":
+                {
+                    _days = fortnightDays(lastPaymentDate);
+                }break;
+            case "Mensual": 
+                {
+                    DateTime nextMonth = lastPaymentDate.AddMonths(1);
+                    TimeSpan t = nextMonth - lastPaymentDate;
+                    _days = t.Days;
+                }break;
+
+        }
+        return _days;
+    }
+
+    private int fortnightDays(DateTime lastPaymentDate)
+    {
+        int _days = 0;
+        if (lastPaymentDate.Day == 14)
+        {
+            _days = 14;
+        }
+        else
+        {
+            if (lastPaymentDate.Day == 28)
+            {
+                DateTime nextFortnight = lastPaymentDate.AddMonths(1);
+                nextFortnight = nextFortnight.AddDays(-14);
+                TimeSpan t = nextFortnight - lastPaymentDate;
+                _days = t.Days;
+            }
+            else
+            {
+                if (lastPaymentDate.Day < 14)
+                {
+                    _days = 14 - lastPaymentDate.Day;
+                }
+                else
+                {
+                    _days = 28 - lastPaymentDate.Day;
+                }
+            }
+        }
+        return _days;
+    }
+
+    private async Task RegisterPayment()
+    {
+        if (_selectedItems1.Length() > 0)
+        {
+            foreach (ProjectModel _pModel in _selectedItems1)
+            {
+                foreach (EmployeeAgreement _employee in _pModel.EmployeeList)
+                {
+                    Agreement searchAgreement = new Agreement(_employee.EmployeeEmail, _pModel.EmployerEmail, _pModel.ProjectName, null, "", 0, null, 1, "");
+                    Agreement employeeAgreement = await AgreementService.GetContractee(searchAgreement);
+                    double benefits = await GetEmployeeBenefits(employeeAgreement, _pModel.DayInterval, _pModel.LastPaymentDate);
+                    double mountToPay = _employee.MountToPay - benefits;
+                    Payment _payment = new Payment(_employee.EmployeeEmail, _pModel.EmployerEmail, _pModel.ProjectName,
+                        mountToPay, _pModel.LastPaymentDate, _pModel.LastPaymentDate.AddDays(_pModel.DayInterval));
+                    if(mountToPay > 0)
+                    {
+                        await PaymentService.AddPayment(_payment);
+                    }
+                }
+                Project _projectInfo = new Project(_pModel.EmployerEmail, _pModel.ProjectName, "", 0, 0, "", 1, _pModel.LastPaymentDate.AddDays(_pModel.DayInterval));
+                ProjectService.UpdatePaymentDate(_projectInfo);
+            }
+            Snackbar.Add("Pagos aprobados", Severity.Success);
+            await Task.Delay(2000);
+            if (_projectsList.Length() == 0)
+            {
+                _empty = true;
+            }
+            nav.NavigateTo($"/Approve_Projects_Payment/{email}/", true);
+        }
+        else
+        {
+            Snackbar.Add("Por favor seleccione los pagos a aprobar", Severity.Warning);
+            await Task.Delay(2000);
+        }
+    }
+    
+    private bool FilterFunc1(ProjectModel element) => FilterFunc(element, searchString1);
+
+    private bool FilterFunc(ProjectModel element, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (element.ProjectName.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private void PageChanged(int i)
+    {
+        _mudTable.NavigateTo(i - 1);
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+}

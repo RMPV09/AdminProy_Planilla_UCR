@@ -1,0 +1,145 @@
+﻿@page "/Projects/{personEmail}/{employerEmail}/{projectName}"
+@using Application.Projects
+@using Application.Agreements
+@using Domain.Projects.Entities
+@using Domain.Agreements.Entities
+@using Presentation.Core.Components
+@using Presentation.Projects.Models
+@using System.Globalization
+@using System.ComponentModel.DataAnnotations
+@using Application.ContextMenu
+@using Presentation.Authentication
+
+@inject IProjectService ProjectService
+@inject IAgreementService AgreementService
+@inject IContextMenuService ContextMenuService
+
+@{ 
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{personEmail}"),
+        new BreadcrumbItem($"{projectName}", href: null, disabled: true)
+    };
+}
+
+<AuthorizeView Roles="Employee">
+    <Authorized>
+    @if (_loading)
+    {
+        <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+                <MudText Align="Align.Center" Typo="Typo.h6">
+                    <MudProgressCircular Color="Color.Secondary" Style="height:70px;width:70px;" Indeterminate="true" />
+                </MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+        <MudGrid>
+            @*Text fields *@
+            <MudItem xs="12" sm="12">
+                <MudPaper  Height="250px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+                    <MudText Align="Align.Center" Typo="Typo.h6">Detalles del proyecto</MudText>
+                    <MudForm @ref="form">
+                        <MudGrid>
+                            <MudItem xs="2"> </MudItem>
+                            <MudItem xs="8">
+                                <MudTextField Label="Nombre del proyecto" Class="mt-3" Variant="Variant.Outlined" ReadOnly="true"
+                                @bind-Value="projectInfo.ProjectName">
+                                </MudTextField>
+                            </MudItem>
+                            <MudItem xs="2"> </MudItem>
+
+                            <MudItem xs="2"> </MudItem>
+                            <MudItem xs="8">
+                                <MudTextField Label="Email del empleador" Lines="1" Variant="Variant.Outlined" ReadOnly="true"
+                                @bind-Value="projectInfo.EmployerEmail"></MudTextField>
+                            </MudItem>
+                            <MudItem xs="2"> </MudItem>
+
+                            <MudItem xs="2"> </MudItem>
+                            <MudItem xs="8">
+                                <MudTextField Label="Descripción del proyecto" Lines="3" Variant="Variant.Outlined" ReadOnly="true"
+                                @bind-Value="projectInfo.ProjectDescription"></MudTextField>
+                            </MudItem>
+                            <MudItem xs="2"> </MudItem>
+                
+                            <MudItem xs="2"> </MudItem>
+                            <MudItem xs="8">
+                                <MudTextField typeof="int" @bind-Value="projectInfo.PaymentInterval" Label="Intervalo de pago" 
+                                Variant="Variant.Outlined" ReadOnly="true"></MudTextField>
+                            </MudItem>
+                            <MudItem xs="2"></MudItem>
+
+                            <MudItem xs="2"> </MudItem>
+                            <MudItem xs="4">
+                                <MudTextField Label="Monto máximo para beneficios" Format="N2" Culture="@cultureCR"
+                                ReadOnly="true" Variant="Variant.Outlined" @bind-Value="projectInfo.MaximumAmountForBenefits" Adornment="Adornment.Start" 
+                                AdornmentText="@cultureCR.NumberFormat.CurrencySymbol"/>
+                            </MudItem>
+
+                            <MudItem xs="4">
+                                <MudTextField @bind-Value="projectInfo.MaximumBenefitAmount" ReadOnly="true" Label="Cantidad máxima de beneficios" 
+                                Variant="Variant.Outlined"></MudTextField>
+                            </MudItem>
+
+                            <MudItem xs="2"></MudItem>
+                            <MudItem xs="2"></MudItem>
+                            <MudItem xs="8">
+                                <br />
+                            </MudItem>        
+                        </MudGrid>
+                    </MudForm>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</Authorized>
+<NotAuthorized>
+</NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _loading = true;
+
+    MudForm form;
+    Project projectInfo = new Project("","","",0.0,0,"",1);
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+    private IEnumerable<Agreement> agreementElements;
+
+    [Parameter] public string personEmail { get; set; }
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        agreementElements = await AgreementService.GetEmployeeAgreements(personEmail);
+        _loading = false;
+        if (agreementElements.Length() > 0)
+        {
+            _loading = false;
+            await FindProject();
+        }
+    }
+
+    private async Task FindProject()
+    {
+        foreach (Agreement element in agreementElements) 
+        {
+            if (projectName == element.ProjectName)
+            {
+                projectInfo = await ProjectService.GetProject(element.EmployerEmail, element.ProjectName);
+                if (element.ContractType.Equals("Servicios profesionales"))
+                {
+                    ContextMenuService.SetProjectsContext(true, true, projectName, projectInfo.EmployerEmail, true, false);
+                }
+                else
+                {
+                    ContextMenuService.SetProjectsContext(true, true, projectName, projectInfo.EmployerEmail, false, false);
+                }
+                break;
+            }  
+        }
+    }
+}

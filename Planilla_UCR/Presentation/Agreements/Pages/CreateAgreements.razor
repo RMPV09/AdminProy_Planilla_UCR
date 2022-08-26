@@ -1,0 +1,355 @@
+﻿@page "/Agreements/{employerEmail}/{projectName}/{employeeEmail}/{employeeName}/New"
+@using Presentation.Core.Components
+@using System.ComponentModel.DataAnnotations
+@using Domain.Projects.Entities
+@using System.Globalization
+
+@using Domain.Agreements.DTOs
+@using Application.Agreements
+@using Domain.Agreements.Entities
+@using Application.People
+@using Domain.People.Entities
+@using Domain.Employees.Entities
+@using Application.Employees
+@using Application.Employers
+@using Domain.Employers.Entities
+@using Domain.Employers.DTOs
+@using Application.AgreementTypes
+@using Domain.AgreementTypes.Entities
+@using Domain.AgreementTypes.DTOs
+@using Domain.Projects.DTOs
+@using Application.Projects
+@using Application.ContextMenu
+
+
+@inject ISnackbar Snackbar
+@inject IAgreementService AgreementService
+@inject IAgreementTypeService AgreementTypeService
+@inject IPersonService PersonService
+@inject IEmployeeService EmployeeService
+@inject IEmployerService EmployerService
+@inject IProjectService ProjectService
+@inject IContextMenuService ContextMenuService
+@inject NavigationManager nav
+
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+            new BreadcrumbItem("Proyectos", href: $"/Projects/{employerEmail}"),
+            new BreadcrumbItem(@projectName, href: $"/Projects/{employerEmail}/{projectName}"),
+            new BreadcrumbItem("Contrataciones",  href: $"/Agreements/{employerEmail}/{projectName}"),
+            new BreadcrumbItem("Establecer contrato",  href: null, disabled: true),
+    };
+}
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    <MudGrid>
+        <MudItem xs="10" sm="12">
+            <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+                 <MudForm @ref="_form">
+                    <MudText Align="Align.Center" Typo="Typo.h6">Establecimiento de contrato</MudText>
+                    <br>
+                    <MudGrid>
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="employeeName" Label="Nombre del empleado" Variant="Variant.Outlined" ReadOnly="true" >
+                            </MudTextField>
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="_myAgreement.EmployeeEmail" Label="Email del empleado" Variant="Variant.Outlined" ReadOnly="true" >
+                            </MudTextField>
+                        </MudItem>
+                        <MudItem xs="2"> </MudItem>
+
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="4">
+                            <MudSelect @bind-Value="_myAgreement.ProjectName" Label="Nombre del proyecto" Variant="Variant.Outlined" Required="true"  RequiredError="El nombre del proyecto es necesario">
+                                @foreach (var project in _projects)
+                                {
+                                    <MudSelectItem T="string" Value="@project.ProjectName">@project.ProjectName</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="_myAgreement.EmployerEmail" Label="Email del empleador" Variant="Variant.Outlined" ReadOnly="true" >
+                         </MudTextField>
+                        </MudItem>
+                        <MudItem xs="2"> </MudItem>
+
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="4">
+                        <MudSelect @bind-Value="_myAgreement.ContractType" Label="Tipo de contrato" Variant="Variant.Outlined" Required="true"  RequiredError="El tipo de contrato es necesario">
+                            <MudSelectItem Value="@("Tiempo completo")" />
+                            <MudSelectItem Value="@("Medio tiempo")" />
+                            <MudSelectItem Value="@("Servicios profesionales")" />
+                        </MudSelect>
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudNumericField @bind-Value="_salaryPerHour" Label="Monto por hora" Variant="Variant.Outlined" Format="N2" Culture="@cultureCR"
+                                 Adornment="Adornment.Start" AdornmentText="@cultureCR.NumberFormat.CurrencySymbol" Required="true" RequiredError="El monto por hora es necesario" HideSpinButtons="true" Min = "0"> 
+                            </MudNumericField>
+                        </MudItem>
+                        <MudItem xs="2"> </MudItem>
+
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="4">
+                            <MudDatePicker Label="Fecha de inicio" @bind-Date="_startDate" DateFormat="yyyy.MM.dd" Variant="Variant.Outlined" Required="true" RequiredError="La fecha de inicio es necesaria"/>
+                        </MudItem>           
+                        <MudItem xs="4">
+                            <MudDatePicker Label="Fecha de finalización" @bind-Date="_endDate" DateFormat="yyyy.MM.dd" Variant="Variant.Outlined" Required="true" RequiredError="La fecha de finalización es necesaria"/>
+                        </MudItem> 
+                        <MudItem xs="2"> </MudItem>
+
+                        <MudItem xs="2"> </MudItem>
+                        <MudItem xs="8">
+                            <MudDivider />
+                        </MudItem> 
+                        <MudItem xs="2"> </MudItem>
+
+                        <br /> <br />
+                        <MudButton Disabled = "true"></MudButton>
+                        <MudButton Disabled = "true"></MudButton>
+                        <MudButton Disabled = "true"></MudButton>                 
+                        <MudButton Disabled="@_saving" @bind-IsValid="@_canSend" Variant="Variant.Filled" Color="Color.Primary" DisableElevation="true" OnClick="TryToEstablishAgreement">                    
+                            @if (_saving)
+                            {
+                                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                                <MudText Class="ms-2">Procesando</MudText>
+                            }
+                            else
+                            {
+                                <MudText Class="ms-2">Crear</MudText>
+                            }
+                        </MudButton>
+                        <MudButton Disabled = "true"> </MudButton>
+                        <MudButton OnClick="GoToPreviousPage" Variant="Variant.Filled" Color="Color.Transparent">
+                            <MudText>Cancelar</MudText>
+                        </MudButton>
+                    </MudGrid>
+                </MudForm>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+@code{
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+    [Parameter] public string employeeEmail { get; set; }
+    [Parameter] public string employeeName { get; set; }
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+    private Agreement _myAgreement = new Agreement("", "", "", null, "", 0, null, 1, "");
+    private AgreementType _myAgreementType = new AgreementType("",0);
+    private IEnumerable<Project> _projects = new List<Project>();
+    private int? _salaryPerHour;
+    private bool _isLoading = true;
+    private bool _saving = false;
+    private bool _canSend = false;
+    private MudForm _form;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ContextMenuService.SetProjectsContext(true, true, projectName, employerEmail, false, false);
+        _myAgreement.EmployerEmail = employerEmail;
+        _myAgreement.ProjectName = projectName;
+        _myAgreement.EmployeeEmail = employeeEmail;
+        _projects = await ProjectService.GetEmployerProyects(employerEmail);
+        _isLoading = false;
+    }
+
+    private async Task TryToEstablishAgreement()
+    {
+        bool isValid = await ValidateFields();
+        if (isValid)
+        {
+            await SaveAgreementType();
+            await SaveAgreement();
+            ShowSnackNotification("Información guardada correctamente", Severity.Success);
+            GoToPreviousPage();
+        }
+
+    }
+
+    private async Task<bool> ValidateFields()
+    {
+        await _form.Validate();
+        bool isValid = false;
+        if (_form.IsValid)
+        {
+            bool isValidDates = ValidateDates();
+            bool isValidEmployeeEmail = await ValidateEmployeeEmail();
+            bool isValidEmployerEmail = await ValidateEmployerEmail();
+            bool isValidProjectName = await ValidateProjectName();
+            bool isValidAgreementSalary = await ValidateAgreementTypeOfContractee();
+            isValid = isValidDates && isValidEmployeeEmail && isValidEmployerEmail && isValidProjectName && isValidAgreementSalary;
+        }
+
+        return isValid;
+    }
+
+    private async Task SaveAgreementType()
+    {
+        bool isValid = false;
+        _saving = true;
+        ParseAgreementType();
+        isValid = await CheckAgreementType(_myAgreementType.TypeAgreement, _myAgreementType.MountPerHour);
+        if (isValid) 
+        {         
+            await AgreementTypeService.CreateAgreementTypeAsync(_myAgreementType);
+        }
+        _saving = false;
+    }
+
+
+    private async Task SaveAgreement()
+    {
+        bool isOld = false;
+        _saving = true;
+        FormatDates();
+        isOld = await CheckIfAgreementIsDesactivated();
+        if (isOld)
+        {
+            await UpdateAgreementStatus();       
+        }
+        else
+        {
+            await AgreementService.CreateAgreementAsync(_myAgreement);
+        }
+        _saving = false;
+        ShowSnackNotification("Contrato establecido", Severity.Success);
+    }
+
+    private bool ValidateDates()
+    {
+        bool isValid = true;
+        if (_startDate > _endDate)
+        {
+            isValid = false;
+            ShowSnackNotification("Por favor, digite fechas de inicio y finalización válidas", Severity.Error);
+        }
+        return isValid;
+    }
+
+
+    private void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    private void FormatDates()
+    {
+        _myAgreement.ContractStartDate = _startDate;
+        _myAgreement.ContractFinishDate = _endDate;
+    }
+
+    private async Task<bool> ValidateEmployeeEmail()
+    {
+        bool isValid = true;
+        IEnumerable<Employee> employeeList = await EmployeeService.GetEmployeeByEmail(_myAgreement.EmployeeEmail);
+        Agreement myLocalAgreement = new Agreement("", "", "", null, "", 0, null, 1, "");
+        myLocalAgreement = await AgreementService.GetContractee(_myAgreement);
+        if (myLocalAgreement != null)
+        {
+            isValid=false;
+            ShowSnackNotification("El empleado con el email: " + _myAgreement.EmployeeEmail +  " ya posee un contrato en el proyecto: " +_myAgreement.ProjectName + 
+                " del empleador " + _myAgreement.EmployerEmail, Severity.Error);
+
+        }
+        else if (employeeList.Length() == 0)
+        {   
+            isValid=false;
+            ShowSnackNotification("El email " + _myAgreement.EmployeeEmail + " NO se encuentra en registrado en el sistema, no es posible asignarlo al contrato ", Severity.Error);
+        }
+        return isValid;
+    }
+
+    private async Task<bool> ValidateEmployerEmail()
+    {
+        bool isValid = true;
+        IEnumerable<Person> personList = await PersonService.GetPersonByEmail(_myAgreement.EmployerEmail);
+        if (personList.Length() == 0)
+        {
+            isValid=false;
+            ShowSnackNotification("El email " + _myAgreement.EmployerEmail + " NO se encuetra en la base de datos", Severity.Error);
+        }
+        return isValid;
+    }
+
+    private async Task<bool> ValidateAgreementTypeOfContractee()
+    {
+        bool isValid = true;
+        _myAgreement.MountPerHour = (int)_salaryPerHour;
+
+        IEnumerable<Agreement> salaryList = await AgreementService.CheckAgreementTypeOfContractee(_myAgreement);
+
+        if (salaryList.Length() != 0)
+        {
+            isValid=false;
+        }
+        return isValid;
+    }
+
+    private async Task<bool> ValidateProjectName()
+    {
+        bool isValid = true;
+        Project Project = new Project("","","",0,0,"", 1);
+        Project = await ProjectService.GetProject(_myAgreement.EmployerEmail, _myAgreement.ProjectName);
+        if (Project == null)
+        {
+            isValid=false;
+            ShowSnackNotification("El nombre del proyecto introducido, " + _myAgreement.ProjectName +" ,NO es válido", Severity.Error);
+        }
+        return isValid;
+
+    }
+
+    private void GoToPreviousPage()
+    {
+        nav.NavigateTo($"/Agreements/{employerEmail}/{projectName}");
+    }
+
+    private void ParseAgreementType()
+    {
+        _myAgreementType.TypeAgreement = _myAgreement.ContractType;
+        _myAgreementType.MountPerHour = (int)_salaryPerHour;
+    }
+
+    private async Task<bool> CheckAgreementType(string myAgreement, int mountPerHour)
+    {
+        bool isValid = true;
+        IEnumerable<AgreementType>salaryList = await AgreementTypeService.checkAgreementType(myAgreement, mountPerHour);
+        if (salaryList.Count() != 0)
+        {
+            isValid=false;
+        }
+        return isValid;
+    }
+
+    private async Task<bool> CheckIfAgreementIsDesactivated()
+    {
+        bool isAnExistingAgreement = false;
+        IEnumerable<Agreement> agreementList = await AgreementService.CheckIfAgreementIsDesactivated(_myAgreement);
+        if (agreementList.Count() != 0)
+        {
+            isAnExistingAgreement = true;
+        }
+        return isAnExistingAgreement;
+    }
+
+    private async Task UpdateAgreementStatus()
+    {
+        await AgreementService.UpdateAgreementStatus(_myAgreement);
+    }
+}

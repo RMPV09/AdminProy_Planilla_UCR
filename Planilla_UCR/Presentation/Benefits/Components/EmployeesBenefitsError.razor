@@ -1,0 +1,39 @@
+﻿@inject NavigationManager nav
+
+<MudPaper  Height="220px" Width="100%" Outlined="true" Class="pa-32" Elevation="25">  
+    <MudToolBar>
+        <MudButton OnClick="SendConmuteSignal"> Beneficios disponibles</MudButton>
+        <MudButton Color="Color.Tertiary"> Mis beneficios </MudButton>
+        <MudSpacer />
+        <MudTextField @bind-Value="_searchString1" Placeholder="Buscar" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </MudToolBar> 
+    <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+    </MudPaper>
+    <br />
+    <MudText Align="Align.Center" Typo="Typo.h5">Todavía no está suscrito a beneficios de @projectName</MudText>
+    <br />
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string projectName { get; set; }
+
+    [Parameter]
+    public string employeeEmail { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SendTableState { get; set; }
+
+    string _searchString1 = "";
+
+    private void GoToProjectDetails()
+    {
+        nav.NavigateTo($"/Projects/Details/{employeeEmail}/{projectName}");
+    }
+
+    private async Task SendConmuteSignal()
+    {
+        await SendTableState.InvokeAsync("");
+    }
+
+}

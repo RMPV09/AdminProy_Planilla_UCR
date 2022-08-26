@@ -1,0 +1,230 @@
+﻿@page "/Create_Project/{employerEmail}"
+@using Domain.Projects.Entities
+@using Domain.Employers.Entities
+@using Application.Projects
+@using Application.Employers
+@using Presentation.Projects.Models
+@using Presentation.Core.Components
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+
+@inject IProjectService ProjectService
+@inject IEmployerService EmployerService
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+
+@{List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Proyectos", href: $"/Projects/{employerEmail}"),
+        new BreadcrumbItem("Nuevo proyecto", href: null, disabled: true)
+    };
+}
+
+<MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+
+<MudGrid>
+    <MudItem xs="10" sm="12">
+        <MudPaper  Height="220px" Width="100%" Outlined="false " Class="border-none pa-4" Elevation="0">
+            <MudForm @ref="form">
+                <MudText Align="Align.Center" Typo="Typo.h6">Crear proyecto</MudText>
+                <MudGrid>
+
+                <MudItem xs="2"> </MudItem>
+                <MudItem xs="8">
+                    <MudTextField Label="Nombre del proyecto" Class="mt-3" Variant="Variant.Outlined"  
+                    Required="true" RequiredError="Ingrese un nombre para su proyecto" 
+                    @bind-Value="projectInfo.ProjectName" For="@(() => limits.projectName)">
+                    </MudTextField>
+                </MudItem>
+                <MudItem xs="2"> </MudItem>
+
+                <MudItem xs="2"> </MudItem>
+                <MudItem xs="8">
+                    <MudTextField Label="Descripción del proyecto" Variant="Variant.Outlined"
+                    @bind-Value="projectInfo.ProjectDescription"  For="@(() => limits.description )"
+                    ></MudTextField>
+                </MudItem>
+                <MudItem xs="2"> </MudItem>
+                
+                <MudItem xs="2"> </MudItem>
+                <MudItem xs="8">
+                    <MudSelect typeof="int" @bind-Value="projectInfo.PaymentInterval" Label="Intervalo de pago" Required="true" 
+                    RequiredError="Ingrese un intervalo de pago para su proyecto" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("Quincenal")">Pago quincenal</MudSelectItem>
+                        <MudSelectItem Value="@("Mensual")">Pago mensual</MudSelectItem>
+                        <MudSelectItem Value="@("Semanal")">Pago semanal</MudSelectItem>
+                        <MudSelectItem Value="@("Bisemanal")">Pago bisemanal</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="2"></MudItem>
+
+                <MudItem xs="2"> </MudItem>
+                <MudItem xs="4">
+             
+                    <MudNumericField Immediate="true" Label="Monto máximo para beneficios" Format="N2" Min="0" Culture="@cultureCR" Variant="Variant.Outlined" @bind-Value="_maximumAmountForBenefits" 
+                    Step="1000" Adornment="Adornment.Start" AdornmentText="@cultureCR.NumberFormat.CurrencySymbol" Required="false" RequiredError="Campo no requerido"/>
+                </MudItem>
+
+                <MudItem xs="4">
+                    <MudNumericField @bind-Value="projectInfo.MaximumBenefitAmount" Min="0"
+                    Label="Cantidad máxima de beneficios" Variant="Variant.Outlined"></MudNumericField>
+                </MudItem>
+
+                <MudItem xs="2"></MudItem>
+                <MudItem xs="2"></MudItem>
+                <MudItem xs="8">
+                    <br />
+                    <MudDivider />
+                </MudItem>
+                <MudItem xs="2"></MudItem>
+                <MudItem xs="2"></MudItem>
+
+                <MudItem xs="8"> 
+                    <MudButton Disabled="@snackHandler._saving" OnClick="SaveProject" 
+                    Variant="Variant.Filled" Color="Color.Primary">
+                        @if (@snackHandler._saving)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                            <MudText Class="ms-2">Creando</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Crear</MudText>
+                        }
+                    </MudButton>
+                    <MudButton Disabled="true"> </MudButton>
+
+                    <MudButton OnClick="CleanForm" Variant="Variant.Filled" Color="Color.Transparent">
+                        <MudText>Limpiar</MudText>
+                    </MudButton>
+                </MudItem>
+                
+                <MudItem xs="2"></MudItem>
+                </MudGrid>
+            </MudForm>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code{
+    SnackHandler snackHandler = new SnackHandler();
+    private double? _maximumAmountForBenefits = 0;
+    private Project projectInfo = new Project("","","",0.0,0,"",1);
+    private LimitsValidationForm limits = new LimitsValidationForm();
+    private  CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+    private MudForm form;
+
+    [Parameter] public string employerEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+
+
+    async Task SaveProject()
+    {
+        projectInfo.EmployerEmail = employerEmail;
+        projectInfo.MaximumAmountForBenefits = Convert.ToDouble(_maximumAmountForBenefits);
+        projectInfo.ProjectName = projectInfo.ProjectName.Trim();
+        Project projectToAdd = projectInfo;
+        snackHandler._saving = true;
+        await ValidProject(projectToAdd);
+        snackHandler._saving = false;
+    }
+
+    async Task ValidProject(Project projectToAdd)
+    {
+        await form.Validate();
+        if (form.IsValid && await (ValidateInfo(projectInfo)))
+        {
+            await ProjectService.CreateProjectAsync(projectToAdd);
+            snackHandler._saving = false;
+            ShowSnackNotification(projectInfo.ProjectName + " creado exitosamente", Severity.Success);
+            await GoToMain();
+        }
+        
+    }
+
+    async Task<bool> ValidateInfo(Project projectInfo)
+    {
+        bool _name =  await (ValidateName(projectInfo));
+        bool _email = await (ValidateEmail(projectInfo));
+        return _name && _email;
+    }
+
+    async Task<bool> ValidateEmail(Project project)
+    {
+        bool _valid = true;
+        Employer _emailChecked = await EmployerService.GetEmployerAsync(project.EmployerEmail);
+        if(_emailChecked == null)
+        {
+            _valid = false;
+            ShowSnackNotification("El email: " +project.EmployerEmail +", no pertenece a un empleador", Severity.Error);
+        }   
+        return _valid;
+    }
+
+    async Task<bool> ValidateName(Project project)
+    {
+        bool _valid = true;
+        IEnumerable<Project> _nameCecked = await ProjectService.GetEmployerProyects(project.EmployerEmail);
+
+        if (_nameCecked.Length() != 0)
+        {
+            Project _tempProject = await ProjectService.GetProject(project.EmployerEmail, project.ProjectName);
+            if (_tempProject != null )
+            {
+                _valid=false;
+                ShowSnackNotification("El nombre del proyecto " + project.ProjectName + " ya está siendo utilizado", Severity.Error);
+            }  
+        }
+        return _valid;
+    }
+
+    void ShowSnackNotification(string message, Severity severity)
+    {
+        Snackbar.Configuration.SnackbarVariant = Variant.Filled;
+        Snackbar.Configuration.PreventDuplicates = false;
+        Snackbar.Configuration.MaxDisplayedSnackbars = 10;
+        Snackbar.Configuration.NewestOnTop = true;
+        Snackbar.Add($"{message}", severity, config =>
+        {
+            config.RequireInteraction = false;
+            config.ShowCloseIcon = true;
+            config.Onclick = snackbar =>
+            {
+                return Task.CompletedTask;
+            };
+        });
+    }
+
+    void CleanForm()
+    {
+        projectInfo.ProjectName = "";
+        projectInfo.EmployerEmail = "";
+        projectInfo.ProjectDescription = "";
+        projectInfo.MaximumBenefitAmount= 0;
+        projectInfo.MaximumAmountForBenefits = 0.0;
+        _maximumAmountForBenefits = 0.0;
+        projectInfo.PaymentInterval = "";
+    }
+
+
+    public class LimitsValidationForm
+    {
+        [StringLength(250, ErrorMessage = "El nombre del proyecto es muy grande")]
+        public string projectName { get; set; }
+
+        [EmailAddress (ErrorMessage = "El Email es inválido")]
+        [StringLength(250, ErrorMessage = "El Email es muy grande")]
+        public string email { get; set; }
+
+        [StringLength(600, ErrorMessage = "La descripción es muy grande")]
+        public string description { get; set; }
+    }
+
+    private async Task GoToMain()
+    {
+        await Task.Delay(2000);
+        nav.NavigateTo($"/Projects/{employerEmail}");
+    }
+}
+    

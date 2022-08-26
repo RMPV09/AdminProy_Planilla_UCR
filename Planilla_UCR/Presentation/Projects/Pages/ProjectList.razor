@@ -1,0 +1,68 @@
+﻿@page "/Projects/{personEmail}"
+@using Domain.Projects.Entities
+@using Domain.Agreements.Entities
+@using Domain.People.Entities
+@using Domain.AgreementTypes.Entities
+@using Application.Projects
+@using Application.Agreements
+@using Application.People
+@using Application.AgreementTypes
+@using Presentation.Core.Components
+@using Presentation.Projects.Components
+@using Application.ContextMenu
+@using Presentation.Authentication
+
+@inject NavigationManager nav
+@inject ISnackbar Snackbar
+@inject IPersonService PersonService
+@inject IProjectService ProjectService
+@inject IAgreementService AgreementService
+@inject IAgreementTypeService AgreementTypeService
+@inject IContextMenuService ContextMenuService
+
+
+
+<AuthorizeView Roles="Employer">
+    <Authorized>
+        @if (selectedWindow)
+        {
+            <EmployerProjectList personEmail="@personEmail" projectName="@projectName"  SendTableState="ReceiveTableState"></EmployerProjectList>
+        }
+        else
+        {
+            <DeactivatedProjects personEmail="@personEmail" projectName="@projectName" SendTableState="ReceiveTableState"></DeactivatedProjects>
+        }
+    </Authorized>
+    <NotAuthorized>
+    </NotAuthorized>
+</AuthorizeView>
+
+<AuthorizeView Roles="Employee">
+    <Authorized>
+        <EmployeeProjectList  personEmail="@personEmail" projectName="@projectName" ></EmployeeProjectList>
+    </Authorized>
+    <NotAuthorized>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool selectedWindow = true;
+    public EventCallback<string> conmuteWindow => EventCallback.Factory.Create<string>(this, ReceiveTableState);
+
+    [Parameter] public string personEmail { get; set; }
+    [Parameter] public string projectName { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            ContextMenuService.SetProjectsContext(false, false, "", "", false, ContextMenuService.GetReportsContext());
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+  
+    public void ReceiveTableState()
+    {
+        selectedWindow = !selectedWindow;
+    }
+}

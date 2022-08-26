@@ -1,0 +1,357 @@
+﻿@page "/Projects_Historical_Payments/{email}"
+
+@using System.Globalization
+@using Application.Projects
+@using Domain.Projects.Entities
+@using Domain.Payments.Entities
+@using Application.Payments
+@using Domain.Subscribes.Entities
+@using Domain.Subscriptions.Entities
+@using Application.Subscribes
+@using Presentation.Employers.Models
+@using Application.PaymentCalculator;
+@using Application.LegalDeductions
+@using Application.TaxCalculator
+@using Domain.LegalDeductions.Entities
+@using Application.Agreements
+@using Domain.Agreements.Entities
+@using Presentation.Employers.XLS
+
+@inject IJSRuntime js
+@inject ILegalDeductionService LegalDeductionService
+@inject IProjectService ProjectService
+@inject IPaymentService PaymentService
+@inject ISubscribeService SubscribeService
+@inject IAgreementService AgreementService
+@inject IPaymentCalculatorService PaymentCalculatorService
+@inject ITaxCalculatorService TaxCalculatorService
+@inject ISnackbar Snackbar
+@inject NavigationManager nav
+
+
+@{
+    List<BreadcrumbItem> _items = new List<BreadcrumbItem>
+    {
+        new BreadcrumbItem("Inicio", href: ""),
+        new BreadcrumbItem("Histórico pagos por proyecto",  href: null, disabled: true),
+    };
+}
+
+@if (_loading) {
+    <MudPaper  Height="220px" Width="100%" Outlined="false" Class="border-none pa-4" Elevation="0">
+        <MudText Align="Align.Center" Typo="Typo.h6">
+            <MudProgressCircular Color="Color.Primary" Style="height:70px;width:70px;" Indeterminate="true" />
+        </MudText>
+
+    </MudPaper>
+} else
+{
+    <MudBreadcrumbs Items="_items" Separator=">"></MudBreadcrumbs>
+    <MudGrid>
+            <MudItem xs="12" Class="d-flex justify-center align-center">
+                <MudItem xs="4">
+                     <MudText Align="Align.Center" Typo="Typo.h6" GutterBottom="true">Reporte histórico de pagos</MudText>
+                </MudItem>
+             </MudItem>
+    </MudGrid>
+    @if (_empty)
+    {
+        <MudPaper  Height="220px" Width="100%" Outlined="true" Class="pa-32" Elevation="25">  
+            <MudToolBar>
+                <MudItem xs="2">
+                    <MudSelect Dense="true" T="string" Label="Proyecto" Variant="Variant.Outlined">
+                    </MudSelect>
+                </MudItem>
+                
+                <MudItem xs="2">
+                    <MudSelect Dense="true" T="string" Label="Fecha de Pago" Variant="Variant.Outlined">
+                    </MudSelect>
+                </MudItem>
+            </MudToolBar> 
+            <MudPaper Height="60px" Width="100%" Outlined="false" Class="border-none" Elevation="0"> 
+            </MudPaper>
+            <br />
+            <MudText Align="Align.Center" Typo="Typo.h5">Todavía no hay pagos en ninguno de sus proyectos</MudText>
+            <br />
+        </MudPaper>
+    }
+    else
+    {
+        <MudTable @ref="_mudTable" Items="@_projectsPaymentsList" RowsPerPage="10" Hover="false" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Filter="new Func<ProjectHistorical,bool>(FiltersFunc)">
+            <ToolBarContent>
+                <MudItem xs="2">
+                    <MudSelect Dense="true" T="string" Label="Proyecto" Variant="Variant.Outlined" TextChanged="OnProjectNameSelect">
+                    <MudSelectItem Value="@(" ")"/>
+                    @foreach (var state in _paymentsProjectNames) {
+                        <MudSelectItem T="string" Value="@state">
+                            @state
+                        </MudSelectItem>
+                    }   
+                    </MudSelect>
+                </MudItem>
+                
+                <MudItem xs="2">
+                    <MudSelect Dense="true" T="string" Label="Fecha de Pago" Variant="Variant.Outlined" TextChanged="OnPaymentDateSelect">
+                    <MudSelectItem Value="@(" ")"/>
+                    @foreach (var state in _paymentsDates) {
+                        <MudSelectItem T="string" Value="@state">
+                            @state
+                        </MudSelectItem>
+                    }   
+                    </MudSelect>
+                </MudItem>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Proyecto</MudTh>
+                <MudTh>Frecuencia de pago</MudTh>
+                <MudTh>Fecha de pago</MudTh>
+                <MudTh>Salario Bruto</MudTh>
+                <MudTh>Beneficios</MudTh>
+                <MudTh>Cargas Sociales Empleador</MudTh>
+                <MudTh>Deducciones Obligatorias Empleado</MudTh>
+                <MudTh>Deducciones Voluntarias Empleado</MudTh>
+                <MudTh>Costo Empleador</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                <MudTd DataLabel="Frecuencia de pago">@context.PaymentFrecuency</MudTd>
+                <MudTd DataLabel="Fecha de pago">@context.EndDate.ToShortDateString()</MudTd>
+                <MudTd DataLabel="Salario Bruto"> @CostFormat(context.GrossSalary) </MudTd>
+                <MudTd DataLabel="Beneficios"> @CostFormat(context.Benefits) </MudTd>
+                <MudTd DataLabel="Cargas Sociales Empleador"> @CostFormat(context.EmployerCharges) </MudTd>
+                <MudTd DataLabel="Deducciones Obligatorias Empleado"> @CostFormat(context.ObligatoryDeductions) </MudTd>
+                <MudTd DataLabel="Deducciones Voluntarias Empleado">  @CostFormat(context.VoluntaryDeductions) </MudTd>
+                <MudTd DataLabel="Costo Empleador"> @CostFormat(context.EmployerCost) </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudPagination SelectedChanged="PageChanged" Count="@((_mudTable.GetFilteredItemsCount() + _mudTable.RowsPerPage - 1) / _mudTable.RowsPerPage)" Color="Color.Primary" Class="pa-4"/>
+            </PagerContent>
+        </MudTable>        <br>
+        <MudToolBar DisableGutters="true" Class="gap-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ClickExportXLS">Exportar Excel</MudButton>
+        </MudToolBar>
+    }
+}
+
+@code {
+    [Parameter]
+    public string email { get; set; }
+    private bool _loading = true;
+    private bool _empty = true;
+    private IList<ProjectHistorical> _projectsPaymentsList = new List<ProjectHistorical>();
+    private IList<Project> _projects = new List<Project>();
+    private IList<ProjectHistorical> _projectsPayment = new List<ProjectHistorical>();
+    private IEnumerable<ProjectHistorical> _joinPayments = new List<ProjectHistorical>();
+    private IEnumerable<LegalDeduction> _legalDeductions = new List<LegalDeduction>();
+    private MudTable<ProjectHistorical> _mudTable;
+    private IList<String> _paymentsDates = new List<String>();
+    private IList<String> _paymentsProjectNames = new List<String>();
+    private ProjectHistorical[] _paymentsHistoryExcel;
+    public CultureInfo cultureCR = CultureInfo.GetCultureInfo("es-CR");
+    public string projectNameFilter = "";
+    public string contracTypeFilter = "";
+    public string paymentDateFilter = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await GetProjectsPayments();
+        _paymentsProjectNames = GetProyectName();
+        _paymentsDates = GetPaymentDate();
+        _loading = false;
+    }
+
+    private async Task GetProjectsPayments()
+    {
+        IList<Payment> payments = (await PaymentService.GetEmployerPayments(email)).ToList();
+        _projects = (await ProjectService.GetEmployerProyects(email)).ToList();
+        _joinPayments = from _payment in payments
+                        join _project in _projects on _payment.ProjectName equals _project.ProjectName
+                        select new ProjectHistorical
+                        {
+                            EmployeeEmail = _payment.EmployeeEmail,
+                            EmployerEmail = _payment.EmployerEmail,
+                            ProjectName = _payment.ProjectName,
+                            PaymentFrecuency = _project.PaymentInterval,
+                            StartDate = (DateTime) _payment.StartDate,
+                            EndDate = (DateTime) _payment.EndDate,
+                            GrossSalary = _payment.GrossSalary,
+                            Benefits = 0,
+                            EmployerCharges = 0,
+                            ObligatoryDeductions = 0,
+                            VoluntaryDeductions = 0,
+                            EmployerCost = 0
+                        };
+        _projectsPayment = _joinPayments.ToList();
+        await GetEmployeeSubscriptions();
+        GetFinalList();
+        if (_projectsPaymentsList.Length() > 0)
+        {
+            _empty = false;
+        }
+    }
+
+    private async Task GetEmployeeSubscriptions()
+    {
+        foreach (ProjectHistorical projectHistorical in _projectsPayment)
+        {
+            double netSalary = projectHistorical.GrossSalary;
+            Agreement _agreement = new Agreement(projectHistorical.EmployeeEmail,
+                projectHistorical.EmployerEmail, projectHistorical.ProjectName, null, "", 0, null, 1, "");
+            _agreement = await AgreementService.GetContractee(_agreement);
+            projectHistorical.Benefits = Convert.ToDouble(await GetEmployeeBenefits(projectHistorical));
+            if (_agreement.ContractType != "Servicios profesionales")
+            {
+                double obligatoryCost = Convert.ToDouble(await GetEmployeeObligatoryDeductions(projectHistorical));
+                netSalary -= obligatoryCost;
+                projectHistorical.ObligatoryDeductions = obligatoryCost;
+                projectHistorical.EmployerCharges = GetEmployerSocialCharges(projectHistorical);
+            }
+            projectHistorical.VoluntaryDeductions = Convert.ToDouble(await GetEmployeeVoluntaryDeductions(projectHistorical, netSalary));
+            projectHistorical.EmployerCost = projectHistorical.GrossSalary + projectHistorical.Benefits +  projectHistorical.EmployerCharges;
+        }
+    }
+
+    private double GetEmployerSocialCharges(ProjectHistorical projectHistorical)
+    {
+        return TaxCalculatorService.GetEmployerSocialCharges(projectHistorical.GrossSalary);
+    }
+
+    private void GetFinalList()
+    {
+        var finalList = (from P in _projectsPayment orderby P.ProjectName
+                         group P by new { P.EmployerEmail, P.ProjectName, P.StartDate, P.EndDate, P.PaymentFrecuency } into grp
+                         select new ProjectHistorical
+                              {
+                                  EmployerEmail = grp.Key.EmployerEmail,
+                                  ProjectName = grp.Key.ProjectName,
+                                  StartDate = grp.Key.StartDate,
+                                  PaymentFrecuency = grp.Key.PaymentFrecuency,
+                                  EndDate = grp.Key.EndDate,
+                                  GrossSalary = grp.Sum(e => e.GrossSalary),
+                                  Benefits = grp.Sum(e=> e.Benefits),
+                                  ObligatoryDeductions =  grp.Sum(e=> e.ObligatoryDeductions),
+                                  VoluntaryDeductions = grp.Sum(e=> e.VoluntaryDeductions),
+                                  EmployerCharges = grp.Sum(e=> e.EmployerCharges),
+                                  EmployerCost = grp.Sum(e=> e.EmployerCost)
+                              });
+        _projectsPaymentsList = finalList.ToList();
+    }
+
+    private async Task<double> GetEmployeeBenefits(ProjectHistorical projectHistorical)
+    {
+        double benefitsCost = 0;
+        Subscribe searchSubscribe= new Subscribe(projectHistorical.EmployeeEmail,
+            projectHistorical.EmployerEmail, projectHistorical.ProjectName, "",
+            0.0, projectHistorical.StartDate,  projectHistorical.EndDate);
+        IList<Subscription> benefits = (await SubscribeService.GetSubscriptionCostsByDate(searchSubscribe)).ToList();
+        benefits = benefits.Where(e => e.TypeSubscription == 1).ToList();
+        foreach (Subscription benefit in benefits)
+        {
+            benefitsCost += benefit.Cost;
+        }
+        return benefitsCost;
+    }
+
+    private async Task<double> GetEmployeeObligatoryDeductions(ProjectHistorical projectHistorical)
+    {
+        double obligatoryCost = 0;
+        _legalDeductions = await LegalDeductionService.GetAllAsync();
+        foreach (var item in _legalDeductions)
+        {
+            obligatoryCost += TaxCalculatorService.GetTaxAmount(item.DeductionName, projectHistorical.GrossSalary);
+        }
+        return obligatoryCost;
+    }
+
+    private async Task<double> GetEmployeeVoluntaryDeductions(ProjectHistorical projectHistorical, double netSalary)
+    {
+        Subscribe searchSubscribe= new Subscribe(projectHistorical.EmployeeEmail,
+            projectHistorical.EmployerEmail, projectHistorical.ProjectName, "",
+            0.0, projectHistorical.StartDate,  projectHistorical.EndDate);
+        IList<Subscription> deductions = (await SubscribeService.GetSubscriptionCostsByDate(searchSubscribe)).ToList();
+        deductions = deductions.Where(e => e.TypeSubscription == 0).ToList();
+        IList<Subscription> _deductionsNotPaid = PaymentCalculatorService.ApplyDeductions(netSalary, deductions);
+        deductions = deductions.Except(_deductionsNotPaid).ToList();
+        double deductionsMountToPay = PaymentCalculatorService.DeductionsCost(deductions);
+        if (deductionsMountToPay > netSalary)
+        {
+            deductionsMountToPay = netSalary;
+        }
+        return deductionsMountToPay;
+    }
+
+    private void PageChanged(int i)
+    {
+        _mudTable.NavigateTo(i - 1);
+    }
+
+    private string CostFormat(double cost)
+    {
+        string formatedCost = string.Format("{0:N}", cost);
+        return formatedCost;
+    }
+
+    private IList<String> GetProyectName()
+    {
+        foreach (ProjectHistorical payment in _projectsPaymentsList)
+        { 
+            if (!_paymentsProjectNames.Contains(payment.ProjectName))
+            {
+                _paymentsProjectNames.Add(payment.ProjectName);
+            }
+        }
+        _paymentsProjectNames = _paymentsProjectNames.OrderBy(e => e).ToList();
+        return _paymentsProjectNames;
+    }
+
+    private IList<String> GetPaymentDate()
+    {
+        _projectsPaymentsList = _projectsPaymentsList.OrderBy(e => e.EndDate).ToList();
+        foreach (ProjectHistorical payment in _projectsPaymentsList)
+        {
+            if (!_paymentsDates.Contains(payment.EndDate.ToShortDateString()))
+            {
+                _paymentsDates.Add(payment.EndDate.ToShortDateString());
+            }
+        }
+        _paymentsDates =  _paymentsDates.Reverse().ToList();
+        return _paymentsDates;
+    }
+
+    private void OnProjectNameSelect(string selected) 
+    {
+        projectNameFilter = selected;
+    }
+
+    private void OnPaymentDateSelect(string selected) 
+    {
+        paymentDateFilter = selected; 
+    }
+
+    private bool FiltersFunc(ProjectHistorical element) => FilterFunc(element, projectNameFilter, paymentDateFilter);
+
+    private bool FilterFunc(ProjectHistorical element, string searchString1, string searchString2)
+    {
+        bool projectNameBool = (element.ProjectName.Equals(searchString1));
+        bool paymentDateBool = (element.EndDate.ToShortDateString().Contains(searchString2, StringComparison.OrdinalIgnoreCase));
+        if((projectNameBool && paymentDateBool) || (projectNameBool && string.IsNullOrWhiteSpace(searchString2)))
+            return true;
+        if((projectNameBool && paymentDateBool) || (paymentDateBool && string.IsNullOrWhiteSpace(searchString1)))
+            return true;
+        if(string.IsNullOrWhiteSpace(searchString1) && string.IsNullOrWhiteSpace(searchString2))
+            return true;  
+        return false;
+    }
+
+    private async void ClickExportXLS()
+    {
+        GetExcelContent();
+        var xls = new Excel();
+        await xls.GenerateExcelReport2Async(js, _paymentsHistoryExcel, "Reporte histórico pagos por proyecto.xlsx");
+    }
+
+    private void GetExcelContent()
+    {
+        _paymentsHistoryExcel = _projectsPaymentsList.ToArray();
+    }
+}
